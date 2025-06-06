@@ -21,61 +21,79 @@ func (d *Document) Get(path string) (interface{}, error) {
 	parts := strings.Split(path, ".")
 	node := root
 	for _, part := range parts {
-		// Check if part is an array index
-		if strings.HasSuffix(part, "]") {
-			// Extract array name and index
-			idx := strings.LastIndex(part, "[")
-			if idx == -1 {
-				return nil, fmt.Errorf("path %s: invalid array index format", path)
-			}
-			arrayName := part[:idx]
-			indexStr := part[idx+1 : len(part)-1]
-			index, err := strconv.Atoi(indexStr)
-			if err != nil {
-				return nil, fmt.Errorf("path %s: invalid array index: %s", path, indexStr)
-			}
-
-			// Get array node
-			if node.Kind != yaml.MappingNode {
-				return nil, fmt.Errorf("path %s: expected mapping node", path)
-			}
-			found := false
-			for i := 0; i < len(node.Content); i += 2 {
-				if node.Content[i].Value == arrayName {
-					arrayNode := node.Content[i+1]
-					if arrayNode.Kind != yaml.SequenceNode {
-						return nil, fmt.Errorf("path %s: expected sequence node", path)
-					}
-					if index < 0 || index >= len(arrayNode.Content) {
-						return nil, fmt.Errorf("path %s: array index out of bounds", path)
-					}
-					node = arrayNode.Content[index]
-					found = true
-					break
-				}
-			}
-			if !found {
-				return nil, fmt.Errorf("path %s: key %s not found", path, arrayName)
-			}
-		} else {
-			// Handle regular key
-			if node.Kind != yaml.MappingNode {
-				return nil, fmt.Errorf("path %s: expected mapping node", path)
-			}
-			found := false
-			for i := 0; i < len(node.Content); i += 2 {
-				if node.Content[i].Value == part {
-					node = node.Content[i+1]
-					found = true
-					break
-				}
-			}
-			if !found {
-				return nil, fmt.Errorf("path %s: key %s not found", path, part)
-			}
+		node, err = navigateToNode(node, part, path)
+		if err != nil {
+			return nil, err
 		}
 	}
 	return nodeToInterface(node)
+}
+
+// navigateToNode navigates to a node based on the path part
+func navigateToNode(node *yaml.Node, part, fullPath string) (*yaml.Node, error) {
+	// Check if part is an array index
+	if strings.HasSuffix(part, "]") {
+		return navigateToArrayElement(node, part, fullPath)
+	}
+	return navigateToMapKey(node, part, fullPath)
+}
+
+// navigateToArrayElement navigates to an array element
+func navigateToArrayElement(node *yaml.Node, part, fullPath string) (*yaml.Node, error) {
+	// Extract array name and index
+	idx := strings.LastIndex(part, "[")
+	if idx == -1 {
+		return nil, fmt.Errorf("path %s: invalid array index format", fullPath)
+	}
+	arrayName := part[:idx]
+	indexStr := part[idx+1 : len(part)-1]
+	index, err := strconv.Atoi(indexStr)
+	if err != nil {
+		return nil, fmt.Errorf("path %s: invalid array index: %s", fullPath, indexStr)
+	}
+
+	// Get array node
+	if node.Kind != yaml.MappingNode {
+		return nil, fmt.Errorf("path %s: expected mapping node", fullPath)
+	}
+
+	arrayNode, found := findKeyInMapping(node, arrayName)
+	if !found {
+		return nil, fmt.Errorf("path %s: key %s not found", fullPath, arrayName)
+	}
+
+	if arrayNode.Kind != yaml.SequenceNode {
+		return nil, fmt.Errorf("path %s: expected sequence node", fullPath)
+	}
+	if index < 0 || index >= len(arrayNode.Content) {
+		return nil, fmt.Errorf("path %s: array index out of bounds", fullPath)
+	}
+
+	return arrayNode.Content[index], nil
+}
+
+// navigateToMapKey navigates to a map key
+func navigateToMapKey(node *yaml.Node, part, fullPath string) (*yaml.Node, error) {
+	if node.Kind != yaml.MappingNode {
+		return nil, fmt.Errorf("path %s: expected mapping node", fullPath)
+	}
+
+	foundNode, found := findKeyInMapping(node, part)
+	if !found {
+		return nil, fmt.Errorf("path %s: key %s not found", fullPath, part)
+	}
+
+	return foundNode, nil
+}
+
+// findKeyInMapping finds a key in a mapping node and returns the value node
+func findKeyInMapping(node *yaml.Node, key string) (*yaml.Node, bool) {
+	for i := 0; i < len(node.Content); i += 2 {
+		if node.Content[i].Value == key {
+			return node.Content[i+1], true
+		}
+	}
+	return nil, false
 }
 
 // GetString returns a string value from the YAML document

@@ -87,145 +87,154 @@ func scalarToInterface(node *yaml.Node) (interface{}, error) {
 func interfaceToNode(v interface{}) (*yaml.Node, error) {
 	switch val := v.(type) {
 	case string:
-		return &yaml.Node{
-			Kind:  yaml.ScalarNode,
-			Tag:   "!!str",
-			Value: val,
-		}, nil
+		return createScalarNode("!!str", val), nil
 	case int:
-		return &yaml.Node{
-			Kind:  yaml.ScalarNode,
-			Tag:   "!!int",
-			Value: fmt.Sprintf("%d", val),
-		}, nil
+		return createScalarNode("!!int", fmt.Sprintf("%d", val)), nil
 	case int64:
-		return &yaml.Node{
-			Kind:  yaml.ScalarNode,
-			Tag:   "!!int",
-			Value: fmt.Sprintf("%d", val),
-		}, nil
+		return createScalarNode("!!int", fmt.Sprintf("%d", val)), nil
 	case float64:
-		return &yaml.Node{
-			Kind:  yaml.ScalarNode,
-			Tag:   "!!float",
-			Value: fmt.Sprintf("%g", val),
-		}, nil
+		return createScalarNode("!!float", fmt.Sprintf("%g", val)), nil
 	case bool:
-		return &yaml.Node{
-			Kind:  yaml.ScalarNode,
-			Tag:   "!!bool",
-			Value: fmt.Sprintf("%t", val),
-		}, nil
+		return createScalarNode("!!bool", fmt.Sprintf("%t", val)), nil
 	case []interface{}:
-		node := &yaml.Node{
-			Kind: yaml.SequenceNode,
-			Tag:  "!!seq",
-		}
-		for _, item := range val {
-			itemNode, err := interfaceToNode(item)
-			if err != nil {
-				return nil, err
-			}
-			node.Content = append(node.Content, itemNode)
-		}
-		return node, nil
+		return createGenericSliceNode(val)
 	case []string:
-		node := &yaml.Node{
-			Kind: yaml.SequenceNode,
-			Tag:  "!!seq",
-		}
-		for _, item := range val {
-			node.Content = append(node.Content, &yaml.Node{
-				Kind:  yaml.ScalarNode,
-				Tag:   "!!str",
-				Value: item,
-			})
-		}
-		return node, nil
+		return createStringSliceNode(val)
 	case []int64:
-		node := &yaml.Node{
-			Kind: yaml.SequenceNode,
-			Tag:  "!!seq",
-		}
-		for _, item := range val {
-			node.Content = append(node.Content, &yaml.Node{
-				Kind:  yaml.ScalarNode,
-				Tag:   "!!int",
-				Value: fmt.Sprintf("%d", item),
-			})
-		}
-		return node, nil
+		return createInt64SliceNode(val)
 	case []float64:
-		node := &yaml.Node{
-			Kind: yaml.SequenceNode,
-			Tag:  "!!seq",
-		}
-		for _, item := range val {
-			node.Content = append(node.Content, &yaml.Node{
-				Kind:  yaml.ScalarNode,
-				Tag:   "!!float",
-				Value: fmt.Sprintf("%g", item),
-			})
-		}
-		return node, nil
+		return createFloat64SliceNode(val)
 	case []bool:
-		node := &yaml.Node{
-			Kind: yaml.SequenceNode,
-			Tag:  "!!seq",
-		}
-		for _, item := range val {
-			node.Content = append(node.Content, &yaml.Node{
-				Kind:  yaml.ScalarNode,
-				Tag:   "!!bool",
-				Value: fmt.Sprintf("%t", item),
-			})
-		}
-		return node, nil
+		return createBoolSliceNode(val)
 	case map[string]interface{}:
-		node := &yaml.Node{
-			Kind: yaml.MappingNode,
-			Tag:  "!!map",
-		}
-		// Sort keys to ensure consistent output
-		keys := make([]string, 0, len(val))
-		for key := range val {
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
-
-		for _, key := range keys {
-			value := val[key]
-			keyNode := &yaml.Node{
-				Kind:  yaml.ScalarNode,
-				Tag:   "!!str",
-				Value: key,
-			}
-			valueNode, err := interfaceToNode(value)
-			if err != nil {
-				return nil, err
-			}
-			node.Content = append(node.Content, keyNode, valueNode)
-		}
-		return node, nil
+		return createMapNode(val)
 	case []map[string]interface{}:
-		node := &yaml.Node{
-			Kind: yaml.SequenceNode,
-			Tag:  "!!seq",
-		}
-		for _, item := range val {
-			itemNode, err := interfaceToNode(item)
-			if err != nil {
-				return nil, err
-			}
-			node.Content = append(node.Content, itemNode)
-		}
-		return node, nil
+		return createMapSliceNode(val)
 	case nil:
-		return &yaml.Node{
-			Kind: yaml.ScalarNode,
-			Tag:  "!!null",
-		}, nil
+		return createNullNode(), nil
 	default:
 		return nil, fmt.Errorf("unsupported type: %T", v)
 	}
+}
+
+// createScalarNode creates a scalar YAML node
+func createScalarNode(tag, value string) *yaml.Node {
+	return &yaml.Node{
+		Kind:  yaml.ScalarNode,
+		Tag:   tag,
+		Value: value,
+	}
+}
+
+// createNullNode creates a null YAML node
+func createNullNode() *yaml.Node {
+	return &yaml.Node{
+		Kind: yaml.ScalarNode,
+		Tag:  "!!null",
+	}
+}
+
+// createGenericSliceNode creates a sequence node from []interface{}
+func createGenericSliceNode(val []interface{}) (*yaml.Node, error) {
+	node := &yaml.Node{
+		Kind: yaml.SequenceNode,
+		Tag:  "!!seq",
+	}
+	for _, item := range val {
+		itemNode, err := interfaceToNode(item)
+		if err != nil {
+			return nil, err
+		}
+		node.Content = append(node.Content, itemNode)
+	}
+	return node, nil
+}
+
+// createStringSliceNode creates a sequence node from []string
+func createStringSliceNode(val []string) (*yaml.Node, error) {
+	node := &yaml.Node{
+		Kind: yaml.SequenceNode,
+		Tag:  "!!seq",
+	}
+	for _, item := range val {
+		node.Content = append(node.Content, createScalarNode("!!str", item))
+	}
+	return node, nil
+}
+
+// createInt64SliceNode creates a sequence node from []int64
+func createInt64SliceNode(val []int64) (*yaml.Node, error) {
+	node := &yaml.Node{
+		Kind: yaml.SequenceNode,
+		Tag:  "!!seq",
+	}
+	for _, item := range val {
+		node.Content = append(node.Content, createScalarNode("!!int", fmt.Sprintf("%d", item)))
+	}
+	return node, nil
+}
+
+// createFloat64SliceNode creates a sequence node from []float64
+func createFloat64SliceNode(val []float64) (*yaml.Node, error) {
+	node := &yaml.Node{
+		Kind: yaml.SequenceNode,
+		Tag:  "!!seq",
+	}
+	for _, item := range val {
+		node.Content = append(node.Content, createScalarNode("!!float", fmt.Sprintf("%g", item)))
+	}
+	return node, nil
+}
+
+// createBoolSliceNode creates a sequence node from []bool
+func createBoolSliceNode(val []bool) (*yaml.Node, error) {
+	node := &yaml.Node{
+		Kind: yaml.SequenceNode,
+		Tag:  "!!seq",
+	}
+	for _, item := range val {
+		node.Content = append(node.Content, createScalarNode("!!bool", fmt.Sprintf("%t", item)))
+	}
+	return node, nil
+}
+
+// createMapNode creates a mapping node from map[string]interface{}
+func createMapNode(val map[string]interface{}) (*yaml.Node, error) {
+	node := &yaml.Node{
+		Kind: yaml.MappingNode,
+		Tag:  "!!map",
+	}
+	// Sort keys to ensure consistent output
+	keys := make([]string, 0, len(val))
+	for key := range val {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	for _, key := range keys {
+		value := val[key]
+		keyNode := createScalarNode("!!str", key)
+		valueNode, err := interfaceToNode(value)
+		if err != nil {
+			return nil, err
+		}
+		node.Content = append(node.Content, keyNode, valueNode)
+	}
+	return node, nil
+}
+
+// createMapSliceNode creates a sequence node from []map[string]interface{}
+func createMapSliceNode(val []map[string]interface{}) (*yaml.Node, error) {
+	node := &yaml.Node{
+		Kind: yaml.SequenceNode,
+		Tag:  "!!seq",
+	}
+	for _, item := range val {
+		itemNode, err := interfaceToNode(item)
+		if err != nil {
+			return nil, err
+		}
+		node.Content = append(node.Content, itemNode)
+	}
+	return node, nil
 }

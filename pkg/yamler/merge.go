@@ -91,111 +91,121 @@ func mergeNodes(target, source *yaml.Node) error {
 
 	switch source.Kind {
 	case yaml.MappingNode:
-		// Ensure target is a mapping node
-		if target.Kind != yaml.MappingNode {
-			target.Kind = yaml.MappingNode
-			target.Tag = "!!map"
-			target.Content = make([]*yaml.Node, 0)
-			target.Value = ""
-		}
-
-		// Merge each key-value pair from source
-		for i := 0; i < len(source.Content); i += 2 {
-			sourceKey := source.Content[i]
-			sourceValue := source.Content[i+1]
-
-			// Find if key exists in target
-			found := false
-			for j := 0; j < len(target.Content); j += 2 {
-				targetKey := target.Content[j]
-				if targetKey.Value == sourceKey.Value {
-					// Key exists, merge the values
-					targetValue := target.Content[j+1]
-					err := mergeNodes(targetValue, sourceValue)
-					if err != nil {
-						return err
-					}
-					found = true
-					break
-				}
-			}
-
-			if !found {
-				// Key doesn't exist, add it
-				keyNode := &yaml.Node{
-					Kind:        sourceKey.Kind,
-					Tag:         sourceKey.Tag,
-					Value:       sourceKey.Value,
-					HeadComment: sourceKey.HeadComment,
-					LineComment: sourceKey.LineComment,
-					FootComment: sourceKey.FootComment,
-				}
-
-				valueNode, err := cloneNode(sourceValue)
-				if err != nil {
-					return err
-				}
-
-				target.Content = append(target.Content, keyNode, valueNode)
-			}
-		}
-
+		return mergeMappingNodes(target, source)
 	case yaml.SequenceNode:
-		// For sequences, we replace the entire content but preserve original style if target is already a sequence
-		originalStyle := target.Style
-		if target.Kind == yaml.SequenceNode && originalStyle != 0 {
-			// Preserve the original style (e.g., flow style)
-			target.Style = originalStyle
-		} else {
-			// Use source style
-			target.Style = source.Style
-		}
-
-		target.Kind = yaml.SequenceNode
-		target.Tag = "!!seq"
-		target.Content = make([]*yaml.Node, 0, len(source.Content))
-		target.Value = ""
-
-		for _, item := range source.Content {
-			clonedItem, err := cloneNode(item)
-			if err != nil {
-				return err
-			}
-			target.Content = append(target.Content, clonedItem)
-		}
-
+		return mergeSequenceNodes(target, source)
 	case yaml.ScalarNode:
-		// For scalars, replace the value but preserve comments
-		origHeadComment := target.HeadComment
-		origLineComment := target.LineComment
-		origFootComment := target.FootComment
-
-		target.Kind = source.Kind
-		target.Tag = source.Tag
-		target.Value = source.Value
-
-		// Preserve original comments if source doesn't have them
-		if source.HeadComment == "" && origHeadComment != "" {
-			target.HeadComment = origHeadComment
-		} else {
-			target.HeadComment = source.HeadComment
-		}
-		if source.LineComment == "" && origLineComment != "" {
-			target.LineComment = origLineComment
-		} else {
-			target.LineComment = source.LineComment
-		}
-		if source.FootComment == "" && origFootComment != "" {
-			target.FootComment = origFootComment
-		} else {
-			target.FootComment = source.FootComment
-		}
-
+		return mergeScalarNodes(target, source)
 	default:
 		return fmt.Errorf("unsupported node kind for merging: %v", source.Kind)
 	}
+}
+
+// mergeMappingNodes merges mapping nodes
+func mergeMappingNodes(target, source *yaml.Node) error {
+	// Ensure target is a mapping node
+	if target.Kind != yaml.MappingNode {
+		target.Kind = yaml.MappingNode
+		target.Tag = "!!map"
+		target.Content = make([]*yaml.Node, 0)
+		target.Value = ""
+	}
+
+	// Merge each key-value pair from source
+	for i := 0; i < len(source.Content); i += 2 {
+		sourceKey := source.Content[i]
+		sourceValue := source.Content[i+1]
+
+		if err := mergeKeyValuePair(target, sourceKey, sourceValue); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// mergeKeyValuePair merges a single key-value pair into target
+func mergeKeyValuePair(target, sourceKey, sourceValue *yaml.Node) error {
+	// Find if key exists in target
+	for j := 0; j < len(target.Content); j += 2 {
+		targetKey := target.Content[j]
+		if targetKey.Value == sourceKey.Value {
+			// Key exists, merge the values
+			targetValue := target.Content[j+1]
+			return mergeNodes(targetValue, sourceValue)
+		}
+	}
+
+	// Key doesn't exist, add it
+	keyNode := &yaml.Node{
+		Kind:        sourceKey.Kind,
+		Tag:         sourceKey.Tag,
+		Value:       sourceKey.Value,
+		HeadComment: sourceKey.HeadComment,
+		LineComment: sourceKey.LineComment,
+		FootComment: sourceKey.FootComment,
+	}
+
+	valueNode, err := cloneNode(sourceValue)
+	if err != nil {
+		return err
+	}
+
+	target.Content = append(target.Content, keyNode, valueNode)
+	return nil
+}
+
+// mergeSequenceNodes merges sequence nodes
+func mergeSequenceNodes(target, source *yaml.Node) error {
+	// For sequences, we replace the entire content but preserve original style if target is already a sequence
+	originalStyle := target.Style
+	if target.Kind == yaml.SequenceNode && originalStyle != 0 {
+		// Preserve the original style (e.g., flow style)
+		target.Style = originalStyle
+	} else {
+		// Use source style
+		target.Style = source.Style
+	}
+
+	target.Kind = yaml.SequenceNode
+	target.Tag = "!!seq"
+	target.Content = make([]*yaml.Node, 0, len(source.Content))
+	target.Value = ""
+
+	for _, item := range source.Content {
+		clonedItem, err := cloneNode(item)
+		if err != nil {
+			return err
+		}
+		target.Content = append(target.Content, clonedItem)
+	}
+	return nil
+}
+
+// mergeScalarNodes merges scalar nodes
+func mergeScalarNodes(target, source *yaml.Node) error {
+	// For scalars, replace the value but preserve comments
+	origHeadComment := target.HeadComment
+	origLineComment := target.LineComment
+	origFootComment := target.FootComment
+
+	target.Kind = source.Kind
+	target.Tag = source.Tag
+	target.Value = source.Value
+
+	// Preserve original comments if source doesn't have them
+	target.HeadComment = preserveComment(source.HeadComment, origHeadComment)
+	target.LineComment = preserveComment(source.LineComment, origLineComment)
+	target.FootComment = preserveComment(source.FootComment, origFootComment)
 
 	return nil
+}
+
+// preserveComment returns source comment if not empty, otherwise returns original
+func preserveComment(sourceComment, originalComment string) string {
+	if sourceComment == "" && originalComment != "" {
+		return originalComment
+	}
+	return sourceComment
 }
 
 // cloneNode creates a deep copy of a YAML node

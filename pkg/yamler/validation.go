@@ -115,36 +115,7 @@ func validateInt(node *yaml.Node, schema *ValidationRule, path string) error {
 		return fmt.Errorf("path %s: invalid integer: %v", path, err)
 	}
 
-	if schema.Minimum != nil && float64(value) < *schema.Minimum {
-		return fmt.Errorf("path %s: value %d is less than minimum %f", path, value, *schema.Minimum)
-	}
-
-	if schema.Maximum != nil && float64(value) > *schema.Maximum {
-		return fmt.Errorf("path %s: value %d is greater than maximum %f", path, value, *schema.Maximum)
-	}
-
-	if schema.ExclusiveMinimum != nil && float64(value) <= *schema.ExclusiveMinimum {
-		return fmt.Errorf("path %s: value %d is not greater than exclusive minimum %f", path, value, *schema.ExclusiveMinimum)
-	}
-
-	if schema.ExclusiveMaximum != nil && float64(value) >= *schema.ExclusiveMaximum {
-		return fmt.Errorf("path %s: value %d is not less than exclusive maximum %f", path, value, *schema.ExclusiveMaximum)
-	}
-
-	if schema.Enum != nil {
-		valid := false
-		for _, enum := range schema.Enum {
-			if num, ok := enum.(int64); ok && num == value {
-				valid = true
-				break
-			}
-		}
-		if !valid {
-			return fmt.Errorf("path %s: value %d is not in enum", path, value)
-		}
-	}
-
-	return nil
+	return validateNumericConstraints(float64(value), schema, path, "integer")
 }
 
 // validateFloat validates a float value
@@ -158,36 +129,83 @@ func validateFloat(node *yaml.Node, schema *ValidationRule, path string) error {
 		return fmt.Errorf("path %s: invalid float: %v", path, err)
 	}
 
+	return validateNumericConstraints(value, schema, path, "float")
+}
+
+// validateNumericConstraints validates numeric constraints for both int and float
+func validateNumericConstraints(value float64, schema *ValidationRule, path, valueType string) error {
+	if err := validateMinimumConstraints(value, schema, path, valueType); err != nil {
+		return err
+	}
+
+	if err := validateMaximumConstraints(value, schema, path, valueType); err != nil {
+		return err
+	}
+
+	return validateNumericEnum(value, schema, path, valueType)
+}
+
+// validateMinimumConstraints validates minimum and exclusive minimum constraints
+func validateMinimumConstraints(value float64, schema *ValidationRule, path, valueType string) error {
 	if schema.Minimum != nil && value < *schema.Minimum {
+		if valueType == "integer" {
+			return fmt.Errorf("path %s: value %d is less than minimum %f", path, int64(value), *schema.Minimum)
+		}
 		return fmt.Errorf("path %s: value %f is less than minimum %f", path, value, *schema.Minimum)
 	}
 
-	if schema.Maximum != nil && value > *schema.Maximum {
-		return fmt.Errorf("path %s: value %f is greater than maximum %f", path, value, *schema.Maximum)
-	}
-
 	if schema.ExclusiveMinimum != nil && value <= *schema.ExclusiveMinimum {
+		if valueType == "integer" {
+			return fmt.Errorf("path %s: value %d is not greater than exclusive minimum %f", path, int64(value), *schema.ExclusiveMinimum)
+		}
 		return fmt.Errorf("path %s: value %f is not greater than exclusive minimum %f", path, value, *schema.ExclusiveMinimum)
 	}
 
+	return nil
+}
+
+// validateMaximumConstraints validates maximum and exclusive maximum constraints
+func validateMaximumConstraints(value float64, schema *ValidationRule, path, valueType string) error {
+	if schema.Maximum != nil && value > *schema.Maximum {
+		if valueType == "integer" {
+			return fmt.Errorf("path %s: value %d is greater than maximum %f", path, int64(value), *schema.Maximum)
+		}
+		return fmt.Errorf("path %s: value %f is greater than maximum %f", path, value, *schema.Maximum)
+	}
+
 	if schema.ExclusiveMaximum != nil && value >= *schema.ExclusiveMaximum {
+		if valueType == "integer" {
+			return fmt.Errorf("path %s: value %d is not less than exclusive maximum %f", path, int64(value), *schema.ExclusiveMaximum)
+		}
 		return fmt.Errorf("path %s: value %f is not less than exclusive maximum %f", path, value, *schema.ExclusiveMaximum)
 	}
 
-	if schema.Enum != nil {
-		valid := false
-		for _, enum := range schema.Enum {
-			if num, ok := enum.(float64); ok && num == value {
-				valid = true
-				break
+	return nil
+}
+
+// validateNumericEnum validates enum constraints for numeric values
+func validateNumericEnum(value float64, schema *ValidationRule, path, valueType string) error {
+	if schema.Enum == nil {
+		return nil
+	}
+
+	for _, enum := range schema.Enum {
+		switch valueType {
+		case "integer":
+			if num, ok := enum.(int64); ok && num == int64(value) {
+				return nil
 			}
-		}
-		if !valid {
-			return fmt.Errorf("path %s: value %f is not in enum", path, value)
+		case "float":
+			if num, ok := enum.(float64); ok && num == value {
+				return nil
+			}
 		}
 	}
 
-	return nil
+	if valueType == "integer" {
+		return fmt.Errorf("path %s: value %d is not in enum", path, int64(value))
+	}
+	return fmt.Errorf("path %s: value %f is not in enum", path, value)
 }
 
 // validateBool validates a boolean value
