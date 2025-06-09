@@ -58,10 +58,208 @@ func Load(content string) (*Document, error) {
 		return nil, fmt.Errorf("failed to parse YAML: %w", err)
 	}
 
-	return &Document{
+	doc := &Document{
 		root: &node,
 		raw:  content,
-	}, nil
+	}
+
+	// Detect if this is an array document root
+	if doc.isArrayRoot() {
+		doc.arrayRoot = true
+	}
+
+	return doc, nil
+}
+
+// isArrayRoot checks if the document root is an array
+func (d *Document) isArrayRoot() bool {
+	if d.root == nil || len(d.root.Content) == 0 {
+		return false
+	}
+	return d.root.Content[0].Kind == yaml.SequenceNode
+}
+
+// arrayRoot возвращает корневой SequenceNode документа для array documents
+func (d *Document) sequenceRoot() (*yaml.Node, error) {
+	if d.root == nil || len(d.root.Content) == 0 {
+		return nil, fmt.Errorf("empty document root")
+	}
+	root := d.root.Content[0]
+	if root.Kind != yaml.SequenceNode {
+		return nil, fmt.Errorf("root is not a sequence node")
+	}
+	return root, nil
+}
+
+// SetArrayElement sets a value in an array document at the specified index and path
+func (d *Document) SetArrayElement(index int, path string, value interface{}) error {
+	if !d.isArrayRoot() {
+		return fmt.Errorf("document root is not an array")
+	}
+
+	root, err := d.sequenceRoot()
+	if err != nil {
+		return err
+	}
+
+	if index < 0 || index >= len(root.Content) {
+		return fmt.Errorf("array index %d out of bounds (length: %d)", index, len(root.Content))
+	}
+
+	element := root.Content[index]
+	if path == "" {
+		// Replace entire element
+		newNode, err := interfaceToNode(value)
+		if err != nil {
+			return err
+		}
+		root.Content[index] = newNode
+		return nil
+	}
+
+	// Set value in the element (assuming it's a mapping)
+	if element.Kind != yaml.MappingNode {
+		return fmt.Errorf("array element at index %d is not a mapping", index)
+	}
+
+	return d.setValueInNode(element, path, value)
+}
+
+// GetArrayDocumentElement gets a value from an array document at the specified index and path
+func (d *Document) GetArrayDocumentElement(index int, path string) (interface{}, error) {
+	if !d.isArrayRoot() {
+		return nil, fmt.Errorf("document root is not an array")
+	}
+
+	root, err := d.sequenceRoot()
+	if err != nil {
+		return nil, err
+	}
+
+	if index < 0 || index >= len(root.Content) {
+		return nil, fmt.Errorf("array index %d out of bounds (length: %d)", index, len(root.Content))
+	}
+
+	element := root.Content[index]
+	if path == "" {
+		// Return entire element
+		return nodeToInterface(element)
+	}
+
+	// Get value from the element
+	return d.getValueFromNode(element, path)
+}
+
+// AddArrayElement adds a new element to an array document
+func (d *Document) AddArrayElement(value interface{}) error {
+	if !d.isArrayRoot() {
+		return fmt.Errorf("document root is not an array")
+	}
+
+	root, err := d.sequenceRoot()
+	if err != nil {
+		return err
+	}
+
+	newNode, err := interfaceToNode(value)
+	if err != nil {
+		return err
+	}
+
+	root.Content = append(root.Content, newNode)
+	return nil
+}
+
+// setValueInNode sets a value in a specific node using a path
+func (d *Document) setValueInNode(node *yaml.Node, path string, value interface{}) error {
+	// This is a simplified version - could be extended to use the full Set logic
+	parts := strings.Split(path, ".")
+	current := node
+
+	for i, part := range parts {
+		if i == len(parts)-1 {
+			// Last part - set the value
+			return d.setDirectValue(current, part, value)
+		}
+
+		// Navigate to the next level
+		found := false
+		for j := 0; j < len(current.Content); j += 2 {
+			if current.Content[j].Value == part {
+				current = current.Content[j+1]
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			return fmt.Errorf("path not found: %s", path)
+		}
+	}
+
+	return nil
+}
+
+// getValueFromNode gets a value from a specific node using a path
+func (d *Document) getValueFromNode(node *yaml.Node, path string) (interface{}, error) {
+	parts := strings.Split(path, ".")
+	current := node
+
+	for _, part := range parts {
+		if current.Kind != yaml.MappingNode {
+			return nil, fmt.Errorf("cannot navigate path in non-mapping node")
+		}
+
+		// Find the key
+		found := false
+		for j := 0; j < len(current.Content); j += 2 {
+			if current.Content[j].Value == part {
+				current = current.Content[j+1]
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			return nil, fmt.Errorf("key not found: %s", part)
+		}
+	}
+
+	return nodeToInterface(current)
+}
+
+// setDirectValue sets a direct value in a mapping node
+func (d *Document) setDirectValue(node *yaml.Node, key string, value interface{}) error {
+	if node.Kind != yaml.MappingNode {
+		return fmt.Errorf("cannot set value in non-mapping node")
+	}
+
+	// Find existing key
+	for i := 0; i < len(node.Content); i += 2 {
+		if node.Content[i].Value == key {
+			// Update existing value
+			newNode, err := interfaceToNode(value)
+			if err != nil {
+				return err
+			}
+			node.Content[i+1] = newNode
+			return nil
+		}
+	}
+
+	// Add new key-value pair
+	keyNode := &yaml.Node{
+		Kind:  yaml.ScalarNode,
+		Tag:   "!!str",
+		Value: key,
+	}
+	valueNode, err := interfaceToNode(value)
+	if err != nil {
+		return err
+	}
+
+	node.Content = append(node.Content, keyNode, valueNode)
+	return nil
 }
 
 // Save writes the YAML document to a file while preserving formatting
@@ -80,104 +278,443 @@ func (d *Document) ToBytes() ([]byte, error) {
 		return []byte{}, nil
 	}
 
-	// If we have raw content and no changes were made, return original
-	if d.raw != "" {
-		// For now, we need to detect the original indentation
-		indent := detectIndentation(d.raw)
-
-		// Use custom encoder that preserves formatting
-		var buf bytes.Buffer
-		encoder := yaml.NewEncoder(&buf)
-		encoder.SetIndent(indent)
-
-		if err := encoder.Encode(d.root); err != nil {
-			return nil, err
-		}
-
-		result := buf.Bytes()
-
-		// Post-process to maintain original style characteristics
-		result = preserveOriginalStyle(result, d.raw)
-
-		return result, nil
-	}
-
-	// Fallback to default encoding
+	// Always encode with standard 2-space indentation first
 	var buf bytes.Buffer
 	encoder := yaml.NewEncoder(&buf)
-	encoder.SetIndent(2) // Default to 2 spaces
+	encoder.SetIndent(2) // Always use 2 spaces for encoding
+
+	// Preserve original node styles before encoding
+	if d.raw != "" {
+		preserveNodeStyles(d.root, d.raw)
+	}
 
 	if err := encoder.Encode(d.root); err != nil {
 		return nil, err
 	}
-	return buf.Bytes(), nil
+	encoder.Close()
+
+	result := buf.Bytes()
+
+	// If we have raw content, apply formatting preservation
+	if d.raw != "" {
+		// Detect original formatting characteristics
+		indentInfo := detectFormattingInfo(d.raw)
+
+		// Post-process to maintain original style characteristics
+		result = preserveOriginalFormatting(result, d.raw, indentInfo)
+	}
+
+	return result, nil
 }
 
-// detectIndentation analyzes the raw YAML to determine the indentation level
-func detectIndentation(raw string) int {
-	lines := strings.Split(raw, "\n")
+// FormattingInfo holds information about the original YAML formatting
+type FormattingInfo struct {
+	IndentSize    int
+	UseTabs       bool
+	EmptyLines    map[string]bool       // Keys that should have empty lines before them
+	FlowStyles    map[string]bool       // Nodes that should remain in flow style
+	ScalarStyles  map[string]yaml.Style // Preserve literal/folded scalars
+	MultilineFlow map[string]bool       // Multiline flow objects
+}
 
-	for _, line := range lines {
+// detectFormattingInfo analyzes the raw YAML to determine formatting characteristics
+func detectFormattingInfo(raw string) *FormattingInfo {
+	lines := strings.Split(raw, "\n")
+	info := &FormattingInfo{
+		IndentSize:    2,
+		UseTabs:       false,
+		EmptyLines:    make(map[string]bool),
+		FlowStyles:    make(map[string]bool),
+		ScalarStyles:  make(map[string]yaml.Style),
+		MultilineFlow: make(map[string]bool),
+	}
+
+	// Collect all indentation levels
+	var indentLevels []int
+	indentCounts := make(map[int]int)
+
+	for i, line := range lines {
 		if strings.TrimSpace(line) == "" {
+			// Check for empty lines before keys
+			if i+1 < len(lines) {
+				nextLine := strings.TrimSpace(lines[i+1])
+				if nextLine != "" && strings.Contains(nextLine, ":") {
+					if idx := strings.Index(nextLine, ":"); idx > 0 {
+						key := strings.TrimSpace(nextLine[:idx])
+						info.EmptyLines[key] = true
+					}
+				}
+			}
 			continue
 		}
 
-		// Find first non-empty line with indentation
+		// Detect indentation type and size
 		leadingSpaces := 0
+		leadingTabs := 0
 		for _, r := range line {
 			if r == ' ' {
 				leadingSpaces++
 			} else if r == '\t' {
-				return 4 // If tabs are used, default to 4 spaces equivalent
+				leadingTabs++
+				info.UseTabs = true
 			} else {
 				break
 			}
 		}
 
-		// If this line has indentation, it likely represents our indent level
-		if leadingSpaces > 0 {
-			return leadingSpaces
+		// Collect indentation levels
+		if leadingSpaces > 0 && !info.UseTabs {
+			indentLevels = append(indentLevels, leadingSpaces)
+			indentCounts[leadingSpaces]++
+		} else if leadingTabs > 0 {
+			info.IndentSize = 4 // Standard tab equivalent
 		}
-	}
 
-	return 2 // Default to 2 spaces if no indentation detected
-}
+		trimmed := strings.TrimSpace(line)
 
-// preserveOriginalStyle attempts to preserve spacing and style from original
-func preserveOriginalStyle(newContent []byte, original string) []byte {
-	newStr := string(newContent)
-	originalLines := strings.Split(original, "\n")
-	newLines := strings.Split(newStr, "\n")
+		// Detect flow styles
+		if strings.Contains(trimmed, "{") || strings.Contains(trimmed, "[") {
+			if strings.Contains(trimmed, ":") {
+				if idx := strings.Index(trimmed, ":"); idx > 0 {
+					key := strings.TrimSpace(trimmed[:idx])
+					info.FlowStyles[key] = true
 
-	// Find patterns of empty lines in original
-	emptyLinePatterns := make(map[string]bool)
+					// Check for multiline flow
+					if strings.HasSuffix(trimmed, "{") || strings.HasSuffix(trimmed, "[") {
+						info.MultilineFlow[key] = true
+					}
+				}
+			}
+		}
 
-	for i, line := range originalLines {
-		if strings.TrimSpace(line) == "" && i > 0 && i < len(originalLines)-1 {
-			// Check what comes after the empty line
-			if i+1 < len(originalLines) {
-				nextLine := strings.TrimSpace(originalLines[i+1])
-				if nextLine != "" {
-					// Extract the key from the next line
-					if idx := strings.Index(nextLine, ":"); idx > 0 {
-						key := strings.TrimSpace(nextLine[:idx])
-						emptyLinePatterns[key] = true
+		// Detect scalar styles (literal | or folded >)
+		if strings.Contains(trimmed, "|") || strings.Contains(trimmed, ">") {
+			if strings.Contains(trimmed, ":") {
+				if idx := strings.Index(trimmed, ":"); idx > 0 {
+					key := strings.TrimSpace(trimmed[:idx])
+					if strings.Contains(trimmed, "|") {
+						info.ScalarStyles[key] = yaml.LiteralStyle
+					} else if strings.Contains(trimmed, ">") {
+						info.ScalarStyles[key] = yaml.FoldedStyle
 					}
 				}
 			}
 		}
 	}
 
-	// Apply empty line patterns to new content
-	var result []string
-	for i, line := range newLines {
-		// Check if this line should have an empty line before it
+	// Find the most common indentation increment if not using tabs
+	if !info.UseTabs && len(indentLevels) > 0 {
+		// Find the GCD of all indentation levels to get the base increment
+		baseIndent := findBaseIndentation(indentLevels)
+		if baseIndent > 0 {
+			info.IndentSize = baseIndent
+		}
+	}
+
+	return info
+}
+
+// findBaseIndentation finds the greatest common divisor of indentation levels
+func findBaseIndentation(levels []int) int {
+	if len(levels) == 0 {
+		return 2
+	}
+
+	// Find minimum non-zero level
+	minLevel := levels[0]
+	for _, level := range levels {
+		if level > 0 && level < minLevel {
+			minLevel = level
+		}
+	}
+
+	// Check if minLevel is a valid base for all levels
+	for _, level := range levels {
+		if level%minLevel != 0 {
+			// Try common indentation sizes
+			for _, candidate := range []int{2, 3, 4, 6, 8} {
+				valid := true
+				for _, l := range levels {
+					if l%candidate != 0 {
+						valid = false
+						break
+					}
+				}
+				if valid {
+					return candidate
+				}
+			}
+			// Fallback to 2 if no pattern found
+			return 2
+		}
+	}
+
+	return minLevel
+}
+
+// preserveNodeStyles recursively preserves original node styles
+func preserveNodeStyles(node *yaml.Node, raw string) {
+	if node == nil {
+		return
+	}
+
+	info := detectFormattingInfo(raw)
+	preserveNodeStylesWithInfo(node, info, "")
+}
+
+// preserveNodeStylesWithInfo recursively preserves node styles using formatting info
+func preserveNodeStylesWithInfo(node *yaml.Node, info *FormattingInfo, path string) {
+	if node == nil {
+		return
+	}
+
+	switch node.Kind {
+	case yaml.MappingNode:
+		// Check if this mapping should be in flow style
+		if info.FlowStyles[path] {
+			if info.MultilineFlow[path] {
+				// Keep multiline flow formatting
+				node.Style = yaml.FlowStyle
+			} else {
+				node.Style = yaml.FlowStyle
+			}
+		}
+
+		// Process children
+		for i := 0; i < len(node.Content); i += 2 {
+			if i+1 < len(node.Content) {
+				key := node.Content[i].Value
+				newPath := path
+				if newPath == "" {
+					newPath = key
+				} else {
+					newPath = path + "." + key
+				}
+
+				// Preserve scalar styles
+				if style, exists := info.ScalarStyles[key]; exists {
+					node.Content[i+1].Style = style
+				}
+
+				preserveNodeStylesWithInfo(node.Content[i+1], info, newPath)
+			}
+		}
+
+	case yaml.SequenceNode:
+		// Check if sequence should be in flow style
+		if info.FlowStyles[path] {
+			node.Style = yaml.FlowStyle
+		}
+
+		// Process children
+		for _, child := range node.Content {
+			preserveNodeStylesWithInfo(child, info, path)
+		}
+	}
+}
+
+// preserveOriginalFormatting applies original formatting characteristics to new content
+func preserveOriginalFormatting(newContent []byte, original string, info *FormattingInfo) []byte {
+	newStr := string(newContent)
+
+	// Convert spaces to tabs if original used tabs
+	if info.UseTabs {
+		newStr = convertSpacesToTabs(newStr, info)
+	} else if info.IndentSize != 2 {
+		// Handle custom space indentation (4, 6, 8 spaces, etc.)
+		newStr = convertToCustomIndentation(newStr, info.IndentSize)
+	}
+
+	// Apply empty line patterns
+	newStr = applyEmptyLinePatterns(newStr, info)
+
+	// Preserve multiline flow formatting
+	newStr = preserveMultilineFlow(newStr, original, info)
+
+	// Preserve folded scalar formatting
+	newStr = preserveFoldedScalars(newStr, original, info)
+
+	return []byte(newStr)
+}
+
+// convertSpacesToTabs converts spaces to tabs based on indent size
+func convertSpacesToTabs(content string, info *FormattingInfo) string {
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		if strings.HasPrefix(line, "  ") {
+			// Convert leading spaces to tabs
+			leadingSpaces := 0
+			for _, r := range line {
+				if r == ' ' {
+					leadingSpaces++
+				} else {
+					break
+				}
+			}
+
+			if leadingSpaces > 0 {
+				tabs := strings.Repeat("\t", leadingSpaces/info.IndentSize)
+				remainingSpaces := strings.Repeat(" ", leadingSpaces%info.IndentSize)
+				lines[i] = tabs + remainingSpaces + strings.TrimLeft(line, " ")
+			}
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+// convertToCustomIndentation converts 2-space indentation to custom indentation
+func convertToCustomIndentation(content string, targetIndentSize int) string {
+	if targetIndentSize == 2 {
+		return content // No conversion needed
+	}
+
+	lines := strings.Split(content, "\n")
+	converted := false
+
+	for i, line := range lines {
+		if strings.HasPrefix(line, " ") {
+			// Count leading spaces
+			leadingSpaces := 0
+			for _, r := range line {
+				if r == ' ' {
+					leadingSpaces++
+				} else {
+					break
+				}
+			}
+
+			// Only convert if it looks like 2-space indentation (multiples of 2, not already converted)
+			if leadingSpaces > 0 && leadingSpaces%2 == 0 && leadingSpaces < targetIndentSize*10 {
+				// Convert 2-space levels to target indent size
+				indentLevel := leadingSpaces / 2
+				newIndent := strings.Repeat(" ", indentLevel*targetIndentSize)
+				lines[i] = newIndent + strings.TrimLeft(line, " ")
+				converted = true
+			}
+		}
+	}
+
+	// If no conversion happened and we have very large indents, it might already be converted
+	if !converted {
+		return content
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// preserveFoldedScalars preserves original formatting of folded scalars
+func preserveFoldedScalars(newContent, original string, info *FormattingInfo) string {
+	// Find folded scalars in original content and preserve their exact formatting
+	originalLines := strings.Split(original, "\n")
+
+	// Map of key -> original folded content
+	foldedContent := make(map[string][]string)
+
+	// Extract original folded scalar content
+	for i, line := range originalLines {
 		trimmed := strings.TrimSpace(line)
-		if trimmed != "" {
+		if strings.Contains(trimmed, ">") && strings.Contains(trimmed, ":") {
 			if idx := strings.Index(trimmed, ":"); idx > 0 {
 				key := strings.TrimSpace(trimmed[:idx])
-				if emptyLinePatterns[key] && i > 0 {
-					// Add empty line before this key
+				if info.ScalarStyles[key] == yaml.FoldedStyle {
+					// Capture the folded content
+					var foldedLines []string
+					indent := getLineIndentation(line)
+
+					// Start from next line and capture indented content
+					for j := i + 1; j < len(originalLines); j++ {
+						nextLine := originalLines[j]
+						if strings.TrimSpace(nextLine) == "" {
+							foldedLines = append(foldedLines, "")
+							continue
+						}
+
+						nextIndent := getLineIndentation(nextLine)
+						if nextIndent > indent {
+							// This line belongs to the folded scalar
+							foldedLines = append(foldedLines, nextLine)
+						} else {
+							// End of folded scalar
+							break
+						}
+					}
+					foldedContent[key] = foldedLines
+				}
+			}
+		}
+	}
+
+	// Replace folded scalars in new content with original formatting
+	for key, originalContent := range foldedContent {
+		newContent = replaceFoldedScalar(newContent, key, originalContent)
+	}
+
+	return newContent
+}
+
+// getLineIndentation returns the number of leading spaces in a line
+func getLineIndentation(line string) int {
+	count := 0
+	for _, r := range line {
+		if r == ' ' {
+			count++
+		} else {
+			break
+		}
+	}
+	return count
+}
+
+// replaceFoldedScalar replaces folded scalar content in new YAML with original formatting
+func replaceFoldedScalar(content, key string, originalLines []string) string {
+	lines := strings.Split(content, "\n")
+
+	// Find the key line in new content
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.Contains(trimmed, ">") && strings.HasPrefix(trimmed, key+":") {
+			// Found the folded scalar key, replace subsequent content
+			indent := getLineIndentation(line)
+
+			// Remove old folded content
+			endIdx := i + 1
+			for j := i + 1; j < len(lines); j++ {
+				if strings.TrimSpace(lines[j]) == "" {
+					endIdx = j + 1
+					continue
+				}
+				lineIndent := getLineIndentation(lines[j])
+				if lineIndent > indent {
+					endIdx = j + 1
+				} else {
+					break
+				}
+			}
+
+			// Insert original content
+			newLines := make([]string, 0, len(lines)-endIdx+i+1+len(originalLines))
+			newLines = append(newLines, lines[:i+1]...)
+			newLines = append(newLines, originalLines...)
+			newLines = append(newLines, lines[endIdx:]...)
+
+			return strings.Join(newLines, "\n")
+		}
+	}
+
+	return content
+}
+
+// applyEmptyLinePatterns adds empty lines before specified keys
+func applyEmptyLinePatterns(content string, info *FormattingInfo) string {
+	lines := strings.Split(content, "\n")
+	var result []string
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" && strings.Contains(trimmed, ":") {
+			if idx := strings.Index(trimmed, ":"); idx > 0 {
+				key := strings.TrimSpace(trimmed[:idx])
+				if info.EmptyLines[key] && i > 0 && strings.TrimSpace(lines[i-1]) != "" {
 					result = append(result, "")
 				}
 			}
@@ -185,7 +722,101 @@ func preserveOriginalStyle(newContent []byte, original string) []byte {
 		result = append(result, line)
 	}
 
-	return []byte(strings.Join(result, "\n"))
+	return strings.Join(result, "\n")
+}
+
+// preserveMultilineFlow preserves multiline flow object formatting
+func preserveMultilineFlow(newContent, original string, info *FormattingInfo) string {
+	// Extract multiline flow objects from original and restore them in new content
+	originalLines := strings.Split(original, "\n")
+
+	// Map of key -> original multiline flow content
+	multilineFlowContent := make(map[string][]string)
+
+	// Find multiline flow objects in original
+	for i, line := range originalLines {
+		trimmed := strings.TrimSpace(line)
+		if strings.Contains(trimmed, ":") {
+			if idx := strings.Index(trimmed, ":"); idx > 0 {
+				key := strings.TrimSpace(trimmed[:idx])
+
+				// Check if this key has multiline flow formatting
+				if info.MultilineFlow[key] {
+					// Capture the multiline flow content
+					var flowLines []string
+					indent := getLineIndentation(line)
+
+					// Add the key line itself
+					flowLines = append(flowLines, line)
+
+					// Capture subsequent lines that belong to this flow object
+					for j := i + 1; j < len(originalLines); j++ {
+						nextLine := originalLines[j]
+						nextTrimmed := strings.TrimSpace(nextLine)
+
+						if nextTrimmed == "" {
+							flowLines = append(flowLines, nextLine)
+							continue
+						}
+
+						nextIndent := getLineIndentation(nextLine)
+
+						// If it's more indented or ends the flow object, include it
+						if nextIndent > indent || strings.HasSuffix(nextTrimmed, "}") || strings.HasSuffix(nextTrimmed, "]") {
+							flowLines = append(flowLines, nextLine)
+
+							// If it ends the flow object, stop
+							if strings.HasSuffix(nextTrimmed, "}") || strings.HasSuffix(nextTrimmed, "]") {
+								break
+							}
+						} else {
+							// End of flow object
+							break
+						}
+					}
+
+					multilineFlowContent[key] = flowLines
+				}
+			}
+		}
+	}
+
+	// Replace multiline flow objects in new content with original formatting
+	for key, originalFlowLines := range multilineFlowContent {
+		newContent = replaceMultilineFlow(newContent, key, originalFlowLines)
+	}
+
+	return newContent
+}
+
+// replaceMultilineFlow replaces multiline flow object in new content with original formatting
+func replaceMultilineFlow(content, key string, originalFlowLines []string) string {
+	lines := strings.Split(content, "\n")
+
+	// Find the key line in new content
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.Contains(trimmed, ":") && strings.HasPrefix(trimmed, key+":") {
+			// Check if this became a single-line flow object
+			if strings.Contains(trimmed, "{") && strings.Contains(trimmed, "}") {
+				// Replace single line with multiline original
+				newLines := make([]string, 0, len(lines)-1+len(originalFlowLines))
+				newLines = append(newLines, lines[:i]...)
+				newLines = append(newLines, originalFlowLines...)
+				newLines = append(newLines, lines[i+1:]...)
+
+				return strings.Join(newLines, "\n")
+			}
+		}
+	}
+
+	return content
+}
+
+// detectIndentation analyzes the raw YAML to determine the indentation level
+func detectIndentation(raw string) int {
+	info := detectFormattingInfo(raw)
+	return info.IndentSize
 }
 
 // OrderedMap preserves key order for YAML marshaling
