@@ -99,7 +99,7 @@ func TestDocument_AppendToArray(t *testing.T) {
 			content: "key:\n  nested: [1, 2]",
 			path:    "key.nested",
 			value:   3,
-			want:    "key:\n    nested: [1, 2, 3]\n",
+			want:    "key:\n  nested: [1, 2, 3]\n",
 			wantErr: false,
 		},
 		{
@@ -186,7 +186,7 @@ func TestDocument_RemoveFromArray(t *testing.T) {
 			content: "key:\n  nested: [1, 2, 3]",
 			path:    "key.nested",
 			index:   1,
-			want:    "key:\n    nested: [1, 3]\n",
+			want:    "key:\n  nested: [1, 3]\n",
 			wantErr: false,
 		},
 		{
@@ -294,7 +294,7 @@ func TestDocument_UpdateArrayElement(t *testing.T) {
 			path:    "key.nested",
 			index:   1,
 			value:   "new",
-			want:    "key:\n    nested: [1, new, 3]\n",
+			want:    "key:\n  nested: [1, new, 3]\n",
 			wantErr: false,
 		},
 		{
@@ -406,7 +406,7 @@ func TestDocument_InsertIntoArray(t *testing.T) {
 			path:    "key.nested",
 			index:   1,
 			value:   "new",
-			want:    "key:\n    nested: [1, new, 2, 3]\n",
+			want:    "key:\n  nested: [1, new, 2, 3]\n",
 			wantErr: false,
 		},
 		{

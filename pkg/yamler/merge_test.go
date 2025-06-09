@@ -37,8 +37,8 @@ author: developer`,
 			expected: `name: new-test
 version: 1.0
 config:
-    debug: true
-    timeout: 30
+  debug: true
+  timeout: 30
 author: developer
 `,
 		},
@@ -55,12 +55,12 @@ author: developer
     timeout: 30
     debug: false`,
 			expected: `app:
-    name: myapp
-    settings:
-        debug: false
-        port: 8080
-        timeout: 30
-    version: 2.0
+  name: myapp
+  settings:
+    debug: false
+    port: 8080
+    timeout: 30
+  version: 2.0
 `,
 		},
 		{
@@ -142,12 +142,12 @@ func TestDocument_MergeAt(t *testing.T) {
 			other: `author: developer
 version: 2.0`,
 			expected: `config:
-    app:
-        name: test
-        version: 2.0
-        author: developer
-    db:
-        host: localhost
+  app:
+    name: test
+    version: 2.0
+    author: developer
+  db:
+    host: localhost
 `,
 		},
 		{
@@ -159,11 +159,11 @@ version: 2.0`,
 			other: `host: localhost
 port: 5432`,
 			expected: `config:
-    app:
-        name: test
-    database:
-        host: localhost
-        port: 5432
+  app:
+    name: test
+  database:
+    host: localhost
+    port: 5432
 `,
 		},
 		{
@@ -174,8 +174,8 @@ port: 5432`,
 field2: value2`,
 			expected: `existing: value
 new_section:
-    field1: value1
-    field2: value2
+  field1: value1
+  field2: value2
 `,
 		},
 	}
@@ -245,8 +245,8 @@ name: new-name # Original name
 version: 1.0
 # Database section
 db:
-    host: localhost # Default host
-    port: 5432
+  host: localhost # Default host
+  port: 5432
 `
 
 	baseDoc, err := Load(base)

@@ -25,7 +25,7 @@ func TestDocument_Set(t *testing.T) {
 			name:    "set int",
 			content: "key: value",
 			path:    "key",
-			value:   int64(123),
+			value:   123,
 			want:    "key: 123\n",
 			wantErr: false,
 		},
@@ -50,7 +50,7 @@ func TestDocument_Set(t *testing.T) {
 			content: "key: value",
 			path:    "key",
 			value:   []interface{}{1, "two", true},
-			want:    "key:\n    - 1\n    - two\n    - true\n",
+			want:    "key:\n  - 1\n  - two\n  - true\n",
 			wantErr: false,
 		},
 		{
@@ -58,7 +58,7 @@ func TestDocument_Set(t *testing.T) {
 			content: "key: value",
 			path:    "key",
 			value:   map[string]interface{}{"a": 1, "b": "two"},
-			want:    "key:\n    a: 1\n    b: two\n",
+			want:    "key:\n  a: 1\n  b: two\n",
 			wantErr: false,
 		},
 		{
@@ -66,7 +66,7 @@ func TestDocument_Set(t *testing.T) {
 			content: "key:\n  nested: value",
 			path:    "key.nested",
 			value:   "new value",
-			want:    "key:\n    nested: new value\n",
+			want:    "key:\n  nested: new value\n",
 			wantErr: false,
 		},
 		{
@@ -74,7 +74,7 @@ func TestDocument_Set(t *testing.T) {
 			content: "key: value",
 			path:    "key.nested",
 			value:   "new value",
-			want:    "key:\n    nested: new value\n",
+			want:    "key:\n  nested: new value\n",
 			wantErr: false,
 		},
 		{
@@ -137,7 +137,7 @@ func TestDocument_SetString(t *testing.T) {
 			content: "key:\n  nested: value",
 			path:    "key.nested",
 			value:   "new value",
-			want:    "key:\n    nested: new value\n",
+			want:    "key:\n  nested: new value\n",
 			wantErr: false,
 		},
 	}
@@ -192,7 +192,7 @@ func TestDocument_SetInt(t *testing.T) {
 			content: "key:\n  nested: value",
 			path:    "key.nested",
 			value:   123,
-			want:    "key:\n    nested: 123\n",
+			want:    "key:\n  nested: 123\n",
 			wantErr: false,
 		},
 	}
@@ -247,7 +247,7 @@ func TestDocument_SetFloat(t *testing.T) {
 			content: "key:\n  nested: value",
 			path:    "key.nested",
 			value:   123.45,
-			want:    "key:\n    nested: 123.45\n",
+			want:    "key:\n  nested: 123.45\n",
 			wantErr: false,
 		},
 	}
@@ -310,7 +310,7 @@ func TestDocument_SetBool(t *testing.T) {
 			content: "key:\n  nested: value",
 			path:    "key.nested",
 			value:   true,
-			want:    "key:\n    nested: true\n",
+			want:    "key:\n  nested: true\n",
 			wantErr: false,
 		},
 	}
@@ -357,7 +357,7 @@ func TestDocument_SetStringSlice(t *testing.T) {
 			content: "key: value",
 			path:    "key",
 			value:   []string{"a", "b", "c"},
-			want:    "key:\n    - a\n    - b\n    - c\n",
+			want:    "key:\n  - a\n  - b\n  - c\n",
 			wantErr: false,
 		},
 		{
@@ -365,7 +365,7 @@ func TestDocument_SetStringSlice(t *testing.T) {
 			content: "key:\n  nested: value",
 			path:    "key.nested",
 			value:   []string{"a", "b", "c"},
-			want:    "key:\n    nested:\n        - a\n        - b\n        - c\n",
+			want:    "key:\n  nested:\n    - a\n    - b\n    - c\n",
 			wantErr: false,
 		},
 	}
@@ -412,7 +412,7 @@ func TestDocument_SetIntSlice(t *testing.T) {
 			content: "key: value",
 			path:    "key",
 			value:   []int64{1, 2, 3},
-			want:    "key:\n    - 1\n    - 2\n    - 3\n",
+			want:    "key:\n  - 1\n  - 2\n  - 3\n",
 			wantErr: false,
 		},
 		{
@@ -420,7 +420,7 @@ func TestDocument_SetIntSlice(t *testing.T) {
 			content: "key:\n  nested: value",
 			path:    "key.nested",
 			value:   []int64{1, 2, 3},
-			want:    "key:\n    nested:\n        - 1\n        - 2\n        - 3\n",
+			want:    "key:\n  nested:\n    - 1\n    - 2\n    - 3\n",
 			wantErr: false,
 		},
 	}
@@ -467,7 +467,7 @@ func TestDocument_SetFloatSlice(t *testing.T) {
 			content: "key: value",
 			path:    "key",
 			value:   []float64{1.1, 2.2, 3.3},
-			want:    "key:\n    - 1.1\n    - 2.2\n    - 3.3\n",
+			want:    "key:\n  - 1.1\n  - 2.2\n  - 3.3\n",
 			wantErr: false,
 		},
 		{
@@ -475,7 +475,7 @@ func TestDocument_SetFloatSlice(t *testing.T) {
 			content: "key:\n  nested: value",
 			path:    "key.nested",
 			value:   []float64{1.1, 2.2, 3.3},
-			want:    "key:\n    nested:\n        - 1.1\n        - 2.2\n        - 3.3\n",
+			want:    "key:\n  nested:\n    - 1.1\n    - 2.2\n    - 3.3\n",
 			wantErr: false,
 		},
 	}
@@ -522,7 +522,7 @@ func TestDocument_SetBoolSlice(t *testing.T) {
 			content: "key: value",
 			path:    "key",
 			value:   []bool{true, false, true},
-			want:    "key:\n    - true\n    - false\n    - true\n",
+			want:    "key:\n  - true\n  - false\n  - true\n",
 			wantErr: false,
 		},
 		{
@@ -530,7 +530,7 @@ func TestDocument_SetBoolSlice(t *testing.T) {
 			content: "key:\n  nested: value",
 			path:    "key.nested",
 			value:   []bool{true, false, true},
-			want:    "key:\n    nested:\n        - true\n        - false\n        - true\n",
+			want:    "key:\n  nested:\n    - true\n    - false\n    - true\n",
 			wantErr: false,
 		},
 	}
@@ -580,7 +580,7 @@ func TestDocument_SetMapSlice(t *testing.T) {
 				{"a": 1, "b": "two"},
 				{"c": true, "d": 4.5},
 			},
-			want:    "key:\n    - a: 1\n      b: two\n    - c: true\n      d: 4.5\n",
+			want:    "key:\n  - a: 1\n    b: two\n  - c: true\n    d: 4.5\n",
 			wantErr: false,
 		},
 		{
@@ -591,7 +591,7 @@ func TestDocument_SetMapSlice(t *testing.T) {
 				{"a": 1, "b": "two"},
 				{"c": true, "d": 4.5},
 			},
-			want:    "key:\n    nested:\n        - a: 1\n          b: two\n        - c: true\n          d: 4.5\n",
+			want:    "key:\n  nested:\n    - a: 1\n      b: two\n    - c: true\n      d: 4.5\n",
 			wantErr: false,
 		},
 	}

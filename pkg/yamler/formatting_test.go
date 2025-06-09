@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-// TestFormattingPreservation tests that the library preserves original formatting styles
+// TestFormattingPreservation tests that the original formatting style is preserved
 func TestFormattingPreservation(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -21,8 +21,8 @@ func TestFormattingPreservation(t *testing.T) {
 			key:      "config.name",
 			newValue: "updated",
 			expectedOutput: `config:
-    items: [1, 2, 3]
-    name: updated
+  items: [1, 2, 3]
+  name: updated
 `,
 		},
 		{
@@ -36,11 +36,11 @@ func TestFormattingPreservation(t *testing.T) {
 			key:      "config.name",
 			newValue: "updated",
 			expectedOutput: `config:
-    items:
-        - 1
-        - 2
-        - 3
-    name: updated
+  items:
+    - 1
+    - 2
+    - 3
+  name: updated
 `,
 		},
 		{
@@ -55,12 +55,12 @@ func TestFormattingPreservation(t *testing.T) {
 			key:      "config.name",
 			newValue: "updated",
 			expectedOutput: `config:
-    flow_array: [a, b, c]
-    block_array:
-        - x
-        - y
-        - z
-    name: updated
+  flow_array: [a, b, c]
+  block_array:
+    - x
+    - y
+    - z
+  name: updated
 `,
 		},
 		{
@@ -71,8 +71,8 @@ func TestFormattingPreservation(t *testing.T) {
 			key:      "data.simple",
 			newValue: "updated",
 			expectedOutput: `data:
-    matrix: [[1, 2], [3, 4]]
-    simple: updated
+  matrix: [[1, 2], [3, 4]]
+  simple: updated
 `,
 		},
 	}
@@ -131,10 +131,10 @@ name: test`,
 				return d.AppendToArray("items", 4)
 			},
 			expectedOutput: `items:
-    - 1
-    - 2
-    - 3
-    - 4
+  - 1
+  - 2
+  - 3
+  - 4
 name: test
 `,
 		},
@@ -160,9 +160,9 @@ name: test`,
 				return d.UpdateArrayElement("items", 1, 99)
 			},
 			expectedOutput: `items:
-    - 1
-    - 99
-    - 3
+  - 1
+  - 99
+  - 3
 name: test
 `,
 		},
@@ -217,14 +217,14 @@ config:
 			},
 			expectedOutput: `# Main config
 config:
-    # Database settings
-    db:
-        host: localhost # Default host
-        port: 3306
-    # Application settings  
-    app:
-        name: myapp # Application name
-        debug: false
+  # Database settings
+  db:
+    host: localhost # Default host
+    port: 3306
+  # Application settings  
+  app:
+    name: myapp # Application name
+    debug: false
 `,
 		},
 		{
@@ -239,10 +239,10 @@ items: # My items
 			},
 			expectedOutput: `# Array config
 items: # My items
-    - item1 # First item
-    - item2 # Second item
-    - item3 # Third item
-    - item4
+  - item1 # First item
+  - item2 # Second item
+  - item3 # Third item
+  - item4
 `,
 		},
 		{
@@ -308,34 +308,34 @@ fourth: 4
 `,
 		},
 		{
-			name: "preserve_key_order_on_nested_set",
+			name: "preserve_nested_key_order",
 			input: `config:
-  alpha: 1
-  beta: 2
-  gamma: 3
+  first: 1
+  second: 2
+  third: 3
 other: value`,
 			operation: func(d *Document) error {
-				return d.Set("config.beta", "updated")
+				return d.Set("config.second", "updated")
 			},
 			expectedOutput: `config:
-    alpha: 1
-    beta: updated
-    gamma: 3
+  first: 1
+  second: updated
+  third: 3
 other: value
 `,
 		},
 		{
-			name: "preserve_key_order_when_adding_new_key",
+			name: "add_new_key_at_end",
 			input: `first: 1
 second: 2
 third: 3`,
 			operation: func(d *Document) error {
-				return d.Set("new_key", "new_value")
+				return d.Set("fourth", 4)
 			},
 			expectedOutput: `first: 1
 second: 2
 third: 3
-new_key: new_value
+fourth: 4
 `,
 		},
 	}

@@ -144,12 +144,12 @@ config:
 			pattern: "config.*.debug",
 			value:   "enabled",
 			expected: `config:
-    development:
-        debug: enabled
-        timeout: 30
-    production:
-        debug: enabled
-        timeout: 60
+  development:
+    debug: enabled
+    timeout: 30
+  production:
+    debug: enabled
+    timeout: 60
 `,
 		},
 		{
@@ -157,12 +157,12 @@ config:
 			pattern: "config.*.timeout",
 			value:   int64(45),
 			expected: `config:
-    development:
-        debug: true
-        timeout: 45
-    production:
-        debug: false
-        timeout: 45
+  development:
+    debug: true
+    timeout: 45
+  production:
+    debug: false
+    timeout: 45
 `,
 		},
 	}

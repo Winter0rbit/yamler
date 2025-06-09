@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -79,14 +80,112 @@ func (d *Document) ToBytes() ([]byte, error) {
 		return []byte{}, nil
 	}
 
+	// If we have raw content and no changes were made, return original
+	if d.raw != "" {
+		// For now, we need to detect the original indentation
+		indent := detectIndentation(d.raw)
+
+		// Use custom encoder that preserves formatting
+		var buf bytes.Buffer
+		encoder := yaml.NewEncoder(&buf)
+		encoder.SetIndent(indent)
+
+		if err := encoder.Encode(d.root); err != nil {
+			return nil, err
+		}
+
+		result := buf.Bytes()
+
+		// Post-process to maintain original style characteristics
+		result = preserveOriginalStyle(result, d.raw)
+
+		return result, nil
+	}
+
+	// Fallback to default encoding
 	var buf bytes.Buffer
 	encoder := yaml.NewEncoder(&buf)
-	encoder.SetIndent(4) // Set 4-space indentation
+	encoder.SetIndent(2) // Default to 2 spaces
 
 	if err := encoder.Encode(d.root); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+// detectIndentation analyzes the raw YAML to determine the indentation level
+func detectIndentation(raw string) int {
+	lines := strings.Split(raw, "\n")
+
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+
+		// Find first non-empty line with indentation
+		leadingSpaces := 0
+		for _, r := range line {
+			if r == ' ' {
+				leadingSpaces++
+			} else if r == '\t' {
+				return 4 // If tabs are used, default to 4 spaces equivalent
+			} else {
+				break
+			}
+		}
+
+		// If this line has indentation, it likely represents our indent level
+		if leadingSpaces > 0 {
+			return leadingSpaces
+		}
+	}
+
+	return 2 // Default to 2 spaces if no indentation detected
+}
+
+// preserveOriginalStyle attempts to preserve spacing and style from original
+func preserveOriginalStyle(newContent []byte, original string) []byte {
+	newStr := string(newContent)
+	originalLines := strings.Split(original, "\n")
+	newLines := strings.Split(newStr, "\n")
+
+	// Find patterns of empty lines in original
+	emptyLinePatterns := make(map[string]bool)
+
+	for i, line := range originalLines {
+		if strings.TrimSpace(line) == "" && i > 0 && i < len(originalLines)-1 {
+			// Check what comes after the empty line
+			if i+1 < len(originalLines) {
+				nextLine := strings.TrimSpace(originalLines[i+1])
+				if nextLine != "" {
+					// Extract the key from the next line
+					if idx := strings.Index(nextLine, ":"); idx > 0 {
+						key := strings.TrimSpace(nextLine[:idx])
+						emptyLinePatterns[key] = true
+					}
+				}
+			}
+		}
+	}
+
+	// Apply empty line patterns to new content
+	var result []string
+	for i, line := range newLines {
+		// Check if this line should have an empty line before it
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" {
+			if idx := strings.Index(trimmed, ":"); idx > 0 {
+				key := strings.TrimSpace(trimmed[:idx])
+				if emptyLinePatterns[key] && i > 0 {
+					// Add empty line before this key
+					result = append(result, "")
+				}
+			}
+		}
+		result = append(result, line)
+	}
+
+	return []byte(strings.Join(result, "\n"))
 }
 
 // OrderedMap preserves key order for YAML marshaling
