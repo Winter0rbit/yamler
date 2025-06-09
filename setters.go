@@ -15,7 +15,7 @@ func (d *Document) Set(path string, value interface{}) error {
 	}
 	parts := splitPath(path)
 	if len(parts) == 0 {
-		// Пустой путь — заменить весь root
+		// Empty path — replace entire root
 		valueNode, err := interfaceToNode(value)
 		if err != nil {
 			return err
@@ -90,12 +90,12 @@ func (d *Document) Set(path string, value interface{}) error {
 	return nil
 }
 
-// getOrCreateParentNode возвращает родительский узел и ключ для замены/добавления
+// getOrCreateParentNode returns the parent node and key for replacement/addition
 func getOrCreateParentNode(root *yaml.Node, parts []string) (*yaml.Node, string, error) {
 	current := root
 	for i := 0; i < len(parts)-1; i++ {
 		part := parts[i]
-		// Массив
+		// Array
 		if isArrayIndex(part) {
 			idx, err := parseArrayIndex(part)
 			if err != nil {
@@ -116,7 +116,7 @@ func getOrCreateParentNode(root *yaml.Node, parts []string) (*yaml.Node, string,
 		}
 		// Map
 		if current.Kind == yaml.ScalarNode {
-			// Если скаляр, но ожидается map — заменяем на map
+			// If scalar but map expected — replace with map
 			current.Kind = yaml.MappingNode
 			current.Tag = "!!map"
 			current.Value = ""

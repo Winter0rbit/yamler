@@ -9,7 +9,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// mappingRoot возвращает корневой MappingNode документа
+// mappingRoot returns the root MappingNode of the document
 func (d *Document) mappingRoot() (*yaml.Node, error) {
 	if d.root == nil || len(d.root.Content) == 0 {
 		return nil, fmt.Errorf("empty document root")
@@ -79,7 +79,7 @@ func (d *Document) isArrayRoot() bool {
 	return d.root.Content[0].Kind == yaml.SequenceNode
 }
 
-// arrayRoot возвращает корневой SequenceNode документа для array documents
+// arrayRoot returns the root SequenceNode of the document for array documents
 func (d *Document) sequenceRoot() (*yaml.Node, error) {
 	if d.root == nil || len(d.root.Content) == 0 {
 		return nil, fmt.Errorf("empty document root")
