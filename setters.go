@@ -3,12 +3,32 @@ package yamler
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
 
 // Set sets a value at the specified path
 func (d *Document) Set(path string, value interface{}) error {
+	// Set document separator preservation flag for Set() operations
+	d.preserveDocumentSeparator = true
+
+	// Handle both mapping and array root documents
+	if d.isArrayRoot() {
+		// Store the current preserveDocumentSeparator setting
+		preserveFlag := d.preserveDocumentSeparator
+
+		// For array root documents, prepend [0] to the path if it doesn't start with array index
+		if path != "" && !strings.HasPrefix(path, "[") {
+			path = "[0]." + path
+		}
+		err := d.SetArrayElement(0, path[4:], value) // Remove "[0]." prefix
+
+		// Restore the preserveDocumentSeparator setting after SetArrayElement
+		d.preserveDocumentSeparator = preserveFlag
+		return err
+	}
+
 	root, err := d.mappingRoot()
 	if err != nil {
 		return err
@@ -67,9 +87,9 @@ func (d *Document) Set(path string, value interface{}) error {
 			parent.Content = append(parent.Content, keyNode, valueNode)
 		}
 	} else if parent.Kind == yaml.SequenceNode {
-		idx, err := strconv.Atoi(key)
+		idx, err := parseArrayIndex(key)
 		if err != nil {
-			return fmt.Errorf("invalid array index: %s", key)
+			return err
 		}
 		if idx < 0 || idx >= len(parent.Content) {
 			return fmt.Errorf("array index out of bounds: %d", idx)

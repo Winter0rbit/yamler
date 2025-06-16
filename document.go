@@ -11,10 +11,11 @@ import (
 
 // Document represents a YAML document with preserved formatting
 type Document struct {
-	root             *yaml.Node
-	raw              string
-	arrayRoot        bool
-	trailingNewlines int
+	root                      *yaml.Node
+	raw                       string
+	arrayRoot                 bool
+	trailingNewlines          int
+	preserveDocumentSeparator bool // Whether to preserve document separators for array root documents
 }
 
 // mappingRoot returns the root MappingNode of the document
@@ -115,6 +116,9 @@ func (d *Document) sequenceRoot() (*yaml.Node, error) {
 
 // SetArrayElement sets a value in an array document at the specified index and path
 func (d *Document) SetArrayElement(index int, path string, value interface{}) error {
+	// Do not preserve document separators for array element operations
+	d.preserveDocumentSeparator = false
+
 	if !d.isArrayRoot() {
 		return fmt.Errorf("document root is not an array")
 	}
@@ -174,6 +178,9 @@ func (d *Document) GetArrayDocumentElement(index int, path string) (interface{},
 
 // AddArrayElement adds a new element to an array document
 func (d *Document) AddArrayElement(value interface{}) error {
+	// Do not preserve document separators for array element operations
+	d.preserveDocumentSeparator = false
+
 	if !d.isArrayRoot() {
 		return fmt.Errorf("document root is not an array")
 	}
@@ -308,6 +315,9 @@ func (d *Document) ToBytes() ([]byte, error) {
 	// Preserve original node styles before encoding
 	if d.raw != "" {
 		preserveNodeStyles(d.root, d.raw)
+		// Apply zero-indent arrays formatting to nodes before encoding
+		info := detectFormattingInfo(d.raw)
+		applyZeroIndentToNodes(d.root, info, "")
 	}
 
 	if err := encoder.Encode(d.root); err != nil {
@@ -323,7 +333,7 @@ func (d *Document) ToBytes() ([]byte, error) {
 		indentInfo := detectFormattingInfo(d.raw)
 
 		// Post-process to maintain original style characteristics
-		result = preserveOriginalFormatting(result, d.raw, indentInfo)
+		result = preserveOriginalFormatting(result, d.raw, indentInfo, d.preserveDocumentSeparator)
 	}
 
 	// Remove any trailing newlines that might have been added by the encoder
@@ -332,8 +342,12 @@ func (d *Document) ToBytes() ([]byte, error) {
 	}
 
 	// Add the correct number of trailing newlines
+	// YAML files should end with at least one newline per convention
 	if d.trailingNewlines > 0 {
 		result = append(result, bytes.Repeat([]byte("\n"), d.trailingNewlines)...)
+	} else {
+		// If no trailing newlines were detected, add one (YAML convention)
+		result = append(result, '\n')
 	}
 
 	return result, nil
@@ -341,24 +355,30 @@ func (d *Document) ToBytes() ([]byte, error) {
 
 // FormattingInfo holds information about the original YAML formatting
 type FormattingInfo struct {
-	IndentSize    int
-	UseTabs       bool
-	EmptyLines    map[string]bool       // Keys that should have empty lines before them
-	FlowStyles    map[string]bool       // Nodes that should remain in flow style
-	ScalarStyles  map[string]yaml.Style // Preserve literal/folded scalars
-	MultilineFlow map[string]bool       // Multiline flow objects
+	IndentSize       int
+	UseTabs          bool
+	EmptyLines       map[string]int        // Number of empty lines before each key
+	FlowStyles       map[string]bool       // Nodes that should remain in flow style
+	ScalarStyles     map[string]yaml.Style // Preserve literal/folded scalars
+	MultilineFlow    map[string]bool       // Multiline flow objects
+	ZeroIndentArrays map[string]bool       // Arrays that start without additional indentation
+	HasDocumentStart bool                  // Whether the original had "---"
+	HasDocumentEnd   bool                  // Whether the original had "..."
 }
 
 // detectFormattingInfo analyzes the raw YAML to determine formatting characteristics
 func detectFormattingInfo(raw string) *FormattingInfo {
 	lines := strings.Split(raw, "\n")
 	info := &FormattingInfo{
-		IndentSize:    2,
-		UseTabs:       false,
-		EmptyLines:    make(map[string]bool),
-		FlowStyles:    make(map[string]bool),
-		ScalarStyles:  make(map[string]yaml.Style),
-		MultilineFlow: make(map[string]bool),
+		IndentSize:       2,
+		UseTabs:          false,
+		EmptyLines:       make(map[string]int),
+		FlowStyles:       make(map[string]bool),
+		ScalarStyles:     make(map[string]yaml.Style),
+		MultilineFlow:    make(map[string]bool),
+		ZeroIndentArrays: make(map[string]bool),
+		HasDocumentStart: false,
+		HasDocumentEnd:   false,
 	}
 
 	// Collect all indentation levels
@@ -367,16 +387,6 @@ func detectFormattingInfo(raw string) *FormattingInfo {
 
 	for i, line := range lines {
 		if strings.TrimSpace(line) == "" {
-			// Check for empty lines before keys
-			if i+1 < len(lines) {
-				nextLine := strings.TrimSpace(lines[i+1])
-				if nextLine != "" && strings.Contains(nextLine, ":") {
-					if idx := strings.Index(nextLine, ":"); idx > 0 {
-						key := strings.TrimSpace(nextLine[:idx])
-						info.EmptyLines[key] = true
-					}
-				}
-			}
 			continue
 		}
 
@@ -403,6 +413,14 @@ func detectFormattingInfo(raw string) *FormattingInfo {
 		}
 
 		trimmed := strings.TrimSpace(line)
+
+		// Detect document separators
+		if trimmed == "---" {
+			info.HasDocumentStart = true
+		}
+		if trimmed == "..." {
+			info.HasDocumentEnd = true
+		}
 
 		// Detect flow styles
 		if strings.Contains(trimmed, "{") || strings.Contains(trimmed, "[") {
@@ -432,6 +450,31 @@ func detectFormattingInfo(raw string) *FormattingInfo {
 				}
 			}
 		}
+
+		// Detect zero-indent arrays (Kubernetes/GitHub Actions style)
+		// Look for lines that are array elements immediately following a key
+		if strings.HasPrefix(trimmed, "- ") && i > 0 {
+			// Check previous non-empty line for a key
+			for j := i - 1; j >= 0; j-- {
+				prevLine := strings.TrimSpace(lines[j])
+				if prevLine == "" {
+					continue // Skip empty lines
+				}
+
+				if strings.Contains(prevLine, ":") && !strings.Contains(prevLine, "- ") {
+					if idx := strings.Index(prevLine, ":"); idx > 0 {
+						key := strings.TrimSpace(prevLine[:idx])
+						// Check if the array element has no additional indentation relative to the key
+						prevIndent := getLineIndentation(lines[j])
+						currentIndent := getLineIndentation(line)
+						if currentIndent == prevIndent {
+							info.ZeroIndentArrays[key] = true
+						}
+					}
+				}
+				break // Only check the immediately previous non-empty line
+			}
+		}
 	}
 
 	// Find the most common indentation increment if not using tabs
@@ -440,6 +483,30 @@ func detectFormattingInfo(raw string) *FormattingInfo {
 		baseIndent := findBaseIndentation(indentLevels)
 		if baseIndent > 0 {
 			info.IndentSize = baseIndent
+		}
+	}
+
+	// Count empty lines before each key
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" && strings.Contains(trimmed, ":") {
+			if idx := strings.Index(trimmed, ":"); idx > 0 {
+				key := strings.TrimSpace(trimmed[:idx])
+
+				// Count consecutive empty lines before this key
+				emptyCount := 0
+				for j := i - 1; j >= 0; j-- {
+					if strings.TrimSpace(lines[j]) == "" {
+						emptyCount++
+					} else {
+						break
+					}
+				}
+
+				if emptyCount > 0 {
+					info.EmptyLines[key] = emptyCount
+				}
+			}
 		}
 	}
 
@@ -545,8 +612,53 @@ func preserveNodeStylesWithInfo(node *yaml.Node, info *FormattingInfo, path stri
 	}
 }
 
+// applyZeroIndentToNodes applies zero-indent formatting to nodes before encoding
+func applyZeroIndentToNodes(node *yaml.Node, info *FormattingInfo, path string) {
+	if node == nil || len(info.ZeroIndentArrays) == 0 {
+		return
+	}
+
+	switch node.Kind {
+	case yaml.DocumentNode:
+		// Process document children
+		for _, child := range node.Content {
+			applyZeroIndentToNodes(child, info, path)
+		}
+
+	case yaml.MappingNode:
+		// Process mapping children
+		for i := 0; i < len(node.Content); i += 2 {
+			if i+1 < len(node.Content) {
+				key := node.Content[i].Value
+				newPath := path
+				if newPath == "" {
+					newPath = key
+				} else {
+					newPath = path + "." + key
+				}
+
+				// Check if this key should have zero-indent arrays
+				if info.ZeroIndentArrays[key] && node.Content[i+1].Kind == yaml.SequenceNode {
+					// Mark this sequence for special indentation handling
+					// We'll use a custom tag to identify it during post-processing
+					node.Content[i+1].Tag = "!!seq"
+					node.Content[i+1].Style = 0 // Block style
+				}
+
+				applyZeroIndentToNodes(node.Content[i+1], info, newPath)
+			}
+		}
+
+	case yaml.SequenceNode:
+		// Process sequence children
+		for _, child := range node.Content {
+			applyZeroIndentToNodes(child, info, path)
+		}
+	}
+}
+
 // preserveOriginalFormatting applies original formatting characteristics to new content
-func preserveOriginalFormatting(newContent []byte, original string, info *FormattingInfo) []byte {
+func preserveOriginalFormatting(newContent []byte, original string, info *FormattingInfo, preserveDocumentSeparator bool) []byte {
 	newStr := string(newContent)
 
 	// Convert spaces to tabs if original used tabs
@@ -565,6 +677,12 @@ func preserveOriginalFormatting(newContent []byte, original string, info *Format
 
 	// Preserve folded scalar formatting
 	newStr = preserveFoldedScalars(newStr, original, info)
+
+	// Apply zero-indent array formatting
+	newStr = applyZeroIndentArrays(newStr, info)
+
+	// Restore document separators
+	newStr = restoreDocumentSeparators(newStr, info, original, preserveDocumentSeparator)
 
 	return []byte(newStr)
 }
@@ -684,6 +802,112 @@ func preserveFoldedScalars(newContent, original string, info *FormattingInfo) st
 	return newContent
 }
 
+// applyZeroIndentArrays applies zero-indent formatting to arrays that should have it
+func applyZeroIndentArrays(content string, info *FormattingInfo) string {
+	if len(info.ZeroIndentArrays) == 0 {
+		return content
+	}
+
+	lines := strings.Split(content, "\n")
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		// Look for keys that should have zero-indent arrays
+		if strings.Contains(trimmed, ":") && !strings.Contains(trimmed, "- ") {
+			if idx := strings.Index(trimmed, ":"); idx > 0 {
+				key := strings.TrimSpace(trimmed[:idx])
+
+				if info.ZeroIndentArrays[key] {
+					// Found a zero-indent array, adjust following array elements
+					keyIndent := getLineIndentation(line)
+
+					// Process following lines that are array elements
+					for j := i + 1; j < len(lines); j++ {
+						nextLine := lines[j]
+						nextTrimmed := strings.TrimSpace(nextLine)
+
+						if nextTrimmed == "" {
+							continue // Skip empty lines
+						}
+
+						if strings.HasPrefix(nextTrimmed, "- ") {
+							// This is an array element
+							nextIndent := getLineIndentation(nextLine)
+
+							// If it has extra indentation, remove it to match key level
+							if nextIndent > keyIndent {
+								// Remove extra indentation to match key level
+								newIndent := strings.Repeat(" ", keyIndent)
+								lines[j] = newIndent + nextTrimmed
+							}
+						} else {
+							// Non-array element, check if it belongs to the array element
+							nextIndent := getLineIndentation(nextLine)
+							if nextIndent > keyIndent {
+								// This might be a nested element of the array item
+								// Adjust its indentation relative to the array element
+								baseArrayIndent := keyIndent
+								expectedElementIndent := baseArrayIndent + info.IndentSize
+								if nextIndent > expectedElementIndent {
+									// Reduce indentation
+									reduction := info.IndentSize
+									newIndent := nextIndent - reduction
+									if newIndent < expectedElementIndent {
+										newIndent = expectedElementIndent
+									}
+									lines[j] = strings.Repeat(" ", newIndent) + nextTrimmed
+								}
+							} else {
+								// Not part of this array anymore
+								break
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// restoreDocumentSeparators adds back document separators if they were in the original
+func restoreDocumentSeparators(content string, info *FormattingInfo, originalContent string, preserveDocumentSeparator bool) string {
+	// Check if the original content actually starts with ---
+	originallyHadDocumentStart := strings.HasPrefix(strings.TrimSpace(originalContent), "---")
+	originallyHadDocumentEnd := strings.HasSuffix(strings.TrimSpace(originalContent), "...")
+
+	// Don't add separators if preservation is disabled or they weren't in original
+	if !preserveDocumentSeparator || (!originallyHadDocumentStart && !originallyHadDocumentEnd) {
+		return content
+	}
+
+	lines := strings.Split(content, "\n")
+	result := make([]string, 0, len(lines)+2)
+
+	// Add document start separator only if original had it and preservation is enabled
+	if originallyHadDocumentStart {
+		result = append(result, "---")
+	}
+
+	// Add content, but remove trailing empty lines if we're adding document end separator
+	if originallyHadDocumentEnd {
+		// Remove trailing empty lines
+		for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+			lines = lines[:len(lines)-1]
+		}
+	}
+	result = append(result, lines...)
+
+	// Add document end separator only if original had it and preservation is enabled
+	if originallyHadDocumentEnd {
+		result = append(result, "...")
+	}
+
+	return strings.Join(result, "\n")
+}
+
 // getLineIndentation returns the number of leading spaces in a line
 func getLineIndentation(line string) int {
 	count := 0
@@ -746,8 +970,12 @@ func applyEmptyLinePatterns(content string, info *FormattingInfo) string {
 		if trimmed != "" && strings.Contains(trimmed, ":") {
 			if idx := strings.Index(trimmed, ":"); idx > 0 {
 				key := strings.TrimSpace(trimmed[:idx])
-				if info.EmptyLines[key] && i > 0 && strings.TrimSpace(lines[i-1]) != "" {
-					result = append(result, "")
+				emptyLinesCount := info.EmptyLines[key]
+				if emptyLinesCount > 0 && i > 0 && strings.TrimSpace(lines[i-1]) != "" {
+					// Add the specified number of empty lines
+					for j := 0; j < emptyLinesCount; j++ {
+						result = append(result, "")
+					}
 				}
 			}
 		}
