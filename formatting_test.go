@@ -363,3 +363,89 @@ fourth: 4
 		})
 	}
 }
+
+// TestTrailingNewlinesPreservation tests that trailing newlines are preserved
+func TestTrailingNewlinesPreservation(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          string
+		key            string
+		newValue       interface{}
+		expectedOutput string
+	}{
+		{
+			name: "preserve_single_trailing_newline",
+			input: `config:
+  name: test
+  value: 123
+`,
+			key:      "config.name",
+			newValue: "updated",
+			expectedOutput: `config:
+  name: updated
+  value: 123
+`,
+		},
+		{
+			name: "preserve_multiple_trailing_newlines",
+			input: `config:
+  name: test
+  value: 123
+
+
+`,
+			key:      "config.name",
+			newValue: "updated",
+			expectedOutput: `config:
+  name: updated
+  value: 123
+
+
+`,
+		},
+		{
+			name: "preserve_trailing_newlines_with_comments",
+			input: `# Configuration
+config:
+  name: test
+  value: 123
+
+# End of file
+
+`,
+			key:      "config.name",
+			newValue: "updated",
+			expectedOutput: `# Configuration
+config:
+  name: updated
+  value: 123
+
+# End of file
+
+`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc, err := Load(tt.input)
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+
+			err = doc.Set(tt.key, tt.newValue)
+			if err != nil {
+				t.Fatalf("Set() error = %v", err)
+			}
+
+			result, err := doc.String()
+			if err != nil {
+				t.Fatalf("String() error = %v", err)
+			}
+
+			if result != tt.expectedOutput {
+				t.Errorf("Trailing newlines not preserved.\nGot:\n%q\nWant:\n%q", result, tt.expectedOutput)
+			}
+		})
+	}
+}

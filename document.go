@@ -9,6 +9,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Document represents a YAML document with preserved formatting
+type Document struct {
+	root             *yaml.Node
+	raw              string
+	arrayRoot        bool
+	trailingNewlines int
+}
+
 // mappingRoot returns the root MappingNode of the document
 func (d *Document) mappingRoot() (*yaml.Node, error) {
 	if d.root == nil || len(d.root.Content) == 0 {
@@ -53,14 +61,28 @@ func Load(content string) (*Document, error) {
 		}, nil
 	}
 
+	// Count trailing newlines
+	trailingNewlines := 0
+	for i := len(content) - 1; i >= 0; i-- {
+		if content[i] == '\n' {
+			trailingNewlines++
+		} else if content[i] == '\r' {
+			// Skip carriage returns
+			continue
+		} else {
+			break
+		}
+	}
+
 	var node yaml.Node
 	if err := yaml.Unmarshal([]byte(content), &node); err != nil {
 		return nil, fmt.Errorf("failed to parse YAML: %w", err)
 	}
 
 	doc := &Document{
-		root: &node,
-		raw:  content,
+		root:             &node,
+		raw:              content,
+		trailingNewlines: trailingNewlines,
 	}
 
 	// Detect if this is an array document root
@@ -302,6 +324,16 @@ func (d *Document) ToBytes() ([]byte, error) {
 
 		// Post-process to maintain original style characteristics
 		result = preserveOriginalFormatting(result, d.raw, indentInfo)
+	}
+
+	// Remove any trailing newlines that might have been added by the encoder
+	for len(result) > 0 && result[len(result)-1] == '\n' {
+		result = result[:len(result)-1]
+	}
+
+	// Add the correct number of trailing newlines
+	if d.trailingNewlines > 0 {
+		result = append(result, bytes.Repeat([]byte("\n"), d.trailingNewlines)...)
 	}
 
 	return result, nil

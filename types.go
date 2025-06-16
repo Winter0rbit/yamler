@@ -1,14 +1,5 @@
 package yamler
 
-import "gopkg.in/yaml.v3"
-
-// Document represents a YAML document with preserved formatting
-type Document struct {
-	root      *yaml.Node
-	raw       string
-	arrayRoot bool // true if document root is an array
-}
-
 // SchemaType represents the type of a YAML value
 type SchemaType string
 
