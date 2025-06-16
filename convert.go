@@ -21,11 +21,15 @@ func splitPath(path string) []string {
 	for _, part := range parts {
 		// Handle array indices
 		if strings.Contains(part, "[") {
-			// Split on [ and ]
-			subparts := strings.FieldsFunc(part, func(r rune) bool {
-				return r == '[' || r == ']'
-			})
-			result = append(result, subparts...)
+			// Find the array name and index
+			idx := strings.Index(part, "[")
+			if idx > 0 {
+				arrayName := part[:idx]
+				arrayIndex := part[idx:]
+				result = append(result, arrayName, arrayIndex)
+			} else {
+				result = append(result, part)
+			}
 		} else {
 			result = append(result, part)
 		}

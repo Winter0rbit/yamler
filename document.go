@@ -332,8 +332,12 @@ func (d *Document) ToBytes() ([]byte, error) {
 	}
 
 	// Add the correct number of trailing newlines
+	// YAML files should end with at least one newline per convention
 	if d.trailingNewlines > 0 {
 		result = append(result, bytes.Repeat([]byte("\n"), d.trailingNewlines)...)
+	} else {
+		// If no trailing newlines were detected, add one (YAML convention)
+		result = append(result, '\n')
 	}
 
 	return result, nil
@@ -341,24 +345,26 @@ func (d *Document) ToBytes() ([]byte, error) {
 
 // FormattingInfo holds information about the original YAML formatting
 type FormattingInfo struct {
-	IndentSize    int
-	UseTabs       bool
-	EmptyLines    map[string]bool       // Keys that should have empty lines before them
-	FlowStyles    map[string]bool       // Nodes that should remain in flow style
-	ScalarStyles  map[string]yaml.Style // Preserve literal/folded scalars
-	MultilineFlow map[string]bool       // Multiline flow objects
+	IndentSize       int
+	UseTabs          bool
+	EmptyLines       map[string]bool       // Keys that should have empty lines before them
+	FlowStyles       map[string]bool       // Nodes that should remain in flow style
+	ScalarStyles     map[string]yaml.Style // Preserve literal/folded scalars
+	MultilineFlow    map[string]bool       // Multiline flow objects
+	ZeroIndentArrays map[string]bool       // Arrays that start without additional indentation
 }
 
 // detectFormattingInfo analyzes the raw YAML to determine formatting characteristics
 func detectFormattingInfo(raw string) *FormattingInfo {
 	lines := strings.Split(raw, "\n")
 	info := &FormattingInfo{
-		IndentSize:    2,
-		UseTabs:       false,
-		EmptyLines:    make(map[string]bool),
-		FlowStyles:    make(map[string]bool),
-		ScalarStyles:  make(map[string]yaml.Style),
-		MultilineFlow: make(map[string]bool),
+		IndentSize:       2,
+		UseTabs:          false,
+		EmptyLines:       make(map[string]bool),
+		FlowStyles:       make(map[string]bool),
+		ScalarStyles:     make(map[string]yaml.Style),
+		MultilineFlow:    make(map[string]bool),
+		ZeroIndentArrays: make(map[string]bool),
 	}
 
 	// Collect all indentation levels
@@ -430,6 +436,31 @@ func detectFormattingInfo(raw string) *FormattingInfo {
 						info.ScalarStyles[key] = yaml.FoldedStyle
 					}
 				}
+			}
+		}
+
+		// Detect zero-indent arrays (Kubernetes/GitHub Actions style)
+		// Look for lines that are array elements immediately following a key
+		if strings.HasPrefix(trimmed, "- ") && i > 0 {
+			// Check previous non-empty line for a key
+			for j := i - 1; j >= 0; j-- {
+				prevLine := strings.TrimSpace(lines[j])
+				if prevLine == "" {
+					continue // Skip empty lines
+				}
+
+				if strings.Contains(prevLine, ":") && !strings.Contains(prevLine, "- ") {
+					if idx := strings.Index(prevLine, ":"); idx > 0 {
+						key := strings.TrimSpace(prevLine[:idx])
+						// Check if the array element has no additional indentation relative to the key
+						prevIndent := getLineIndentation(lines[j])
+						currentIndent := getLineIndentation(line)
+						if currentIndent == prevIndent {
+							info.ZeroIndentArrays[key] = true
+						}
+					}
+				}
+				break // Only check the immediately previous non-empty line
 			}
 		}
 	}
@@ -566,6 +597,9 @@ func preserveOriginalFormatting(newContent []byte, original string, info *Format
 	// Preserve folded scalar formatting
 	newStr = preserveFoldedScalars(newStr, original, info)
 
+	// Apply zero-indent array formatting
+	newStr = applyZeroIndentArrays(newStr, info)
+
 	return []byte(newStr)
 }
 
@@ -682,6 +716,76 @@ func preserveFoldedScalars(newContent, original string, info *FormattingInfo) st
 	}
 
 	return newContent
+}
+
+// applyZeroIndentArrays applies zero-indent formatting to arrays that should have it
+func applyZeroIndentArrays(content string, info *FormattingInfo) string {
+	if len(info.ZeroIndentArrays) == 0 {
+		return content
+	}
+
+	lines := strings.Split(content, "\n")
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		// Look for keys that should have zero-indent arrays
+		if strings.Contains(trimmed, ":") && !strings.Contains(trimmed, "- ") {
+			if idx := strings.Index(trimmed, ":"); idx > 0 {
+				key := strings.TrimSpace(trimmed[:idx])
+
+				if info.ZeroIndentArrays[key] {
+					// Found a zero-indent array, adjust following array elements
+					keyIndent := getLineIndentation(line)
+
+					// Process following lines that are array elements
+					for j := i + 1; j < len(lines); j++ {
+						nextLine := lines[j]
+						nextTrimmed := strings.TrimSpace(nextLine)
+
+						if nextTrimmed == "" {
+							continue // Skip empty lines
+						}
+
+						if strings.HasPrefix(nextTrimmed, "- ") {
+							// This is an array element
+							nextIndent := getLineIndentation(nextLine)
+
+							// If it has extra indentation, remove it to match key level
+							if nextIndent > keyIndent {
+								// Remove extra indentation to match key level
+								newIndent := strings.Repeat(" ", keyIndent)
+								lines[j] = newIndent + nextTrimmed
+							}
+						} else {
+							// Non-array element, check if it belongs to the array element
+							nextIndent := getLineIndentation(nextLine)
+							if nextIndent > keyIndent {
+								// This might be a nested element of the array item
+								// Adjust its indentation relative to the array element
+								baseArrayIndent := keyIndent
+								expectedElementIndent := baseArrayIndent + info.IndentSize
+								if nextIndent > expectedElementIndent {
+									// Reduce indentation
+									reduction := info.IndentSize
+									newIndent := nextIndent - reduction
+									if newIndent < expectedElementIndent {
+										newIndent = expectedElementIndent
+									}
+									lines[j] = strings.Repeat(" ", newIndent) + nextTrimmed
+								}
+							} else {
+								// Not part of this array anymore
+								break
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return strings.Join(lines, "\n")
 }
 
 // getLineIndentation returns the number of leading spaces in a line

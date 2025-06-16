@@ -67,9 +67,9 @@ func (d *Document) Set(path string, value interface{}) error {
 			parent.Content = append(parent.Content, keyNode, valueNode)
 		}
 	} else if parent.Kind == yaml.SequenceNode {
-		idx, err := strconv.Atoi(key)
+		idx, err := parseArrayIndex(key)
 		if err != nil {
-			return fmt.Errorf("invalid array index: %s", key)
+			return err
 		}
 		if idx < 0 || idx >= len(parent.Content) {
 			return fmt.Errorf("array index out of bounds: %d", idx)
