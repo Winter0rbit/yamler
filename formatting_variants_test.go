@@ -615,144 +615,143 @@ services:
       POSTGRES_PASSWORD: pass
 `,
 		},
-		// TODO: Fix zero-indent array formatting before enabling these tests
+		// TODO: Zero-indent arrays require custom encoder - complex architectural change
 		/* {
-							name: "kubernetes_manifest_style",
-							input: `apiVersion: apps/v1
-				kind: Deployment
-				metadata:
-				  name: nginx-deployment
-				  labels:
-				    app: nginx
-				spec:
-				  replicas: 3
-				  selector:
-				    matchLabels:
-				      app: nginx
-				  template:
-				    metadata:
-				      labels:
-				        app: nginx
-				    spec:
-				      containers:
-				      - name: nginx
-				        image: nginx:1.20
-				        ports:
-				        - containerPort: 80`,
-							key:      "spec.replicas",
-							newValue: 5,
-							expectedOutput: `apiVersion: apps/v1
-				kind: Deployment
-				metadata:
-				  name: nginx-deployment
-				  labels:
-				    app: nginx
-				spec:
-				  replicas: 5
-				  selector:
-				    matchLabels:
-				      app: nginx
-				  template:
-				    metadata:
-				      labels:
-				        app: nginx
-				    spec:
-				      containers:
-				      - name: nginx
-				        image: nginx:1.20
-				        ports:
-				                - containerPort: 80
+					name: "kubernetes_manifest_style",
+					input: `apiVersion: apps/v1
+		kind: Deployment
+		metadata:
+		  name: nginx-deployment
+		  labels:
+		    app: nginx
+		spec:
+		  replicas: 3
+		  selector:
+		    matchLabels:
+		      app: nginx
+		  template:
+		    metadata:
+		      labels:
+		        app: nginx
+		    spec:
+		      containers:
+		      - name: nginx
+		        image: nginx:1.20
+		        ports:
+		        - containerPort: 80`,
+					key:      "spec.replicas",
+					newValue: 5,
+					expectedOutput: `apiVersion: apps/v1
+		kind: Deployment
+		metadata:
+		  name: nginx-deployment
+		  labels:
+		    app: nginx
+		spec:
+		  replicas: 5
+		  selector:
+		    matchLabels:
+		      app: nginx
+		  template:
+		    metadata:
+		      labels:
+		        app: nginx
+		    spec:
+		      containers:
+		      - name: nginx
+		        image: nginx:1.20
+		        ports:
+		        - containerPort: 80
 		`,
-				}, */
+								}, */
 		/* {
 					name: "github_actions_style",
-							input: `name: CI
-				on:
-				  push:
-				    branches: [main, develop]
-				  pull_request:
-				    branches: [main]
+					input: `name: CI
+		on:
+		  push:
+		    branches: [main, develop]
+		  pull_request:
+		    branches: [main]
 
-				jobs:
-				  test:
-				    runs-on: ubuntu-latest
-				    strategy:
-				      matrix:
-				        node-version: [14.x, 16.x, 18.x]
-				    steps:
-				    - uses: actions/checkout@v3
-				    - name: Use Node.js ${{ matrix.node-version }}
-				      uses: actions/setup-node@v3
-				      with:
-				        node-version: ${{ matrix.node-version }}
-				    - run: npm ci
-				    - run: npm test`,
-							key:      "jobs.test.strategy.matrix.node-version[2]",
-							newValue: "20.x",
-							expectedOutput: `name: CI
-				on:
-				  push:
-				    branches: [main, develop]
-				  pull_request:
-				    branches: [main]
+		jobs:
+		  test:
+		    runs-on: ubuntu-latest
+		    strategy:
+		      matrix:
+		        node-version: [14.x, 16.x, 18.x]
+		    steps:
+		    - uses: actions/checkout@v3
+		    - name: Use Node.js ${{ matrix.node-version }}
+		      uses: actions/setup-node@v3
+		      with:
+		        node-version: ${{ matrix.node-version }}
+		    - run: npm ci
+		    - run: npm test`,
+					key:      "jobs.test.strategy.matrix.node-version[2]",
+					newValue: "20.x",
+					expectedOutput: `name: CI
+		on:
+		  push:
+		    branches: [main, develop]
+		  pull_request:
+		    branches: [main]
 
-				jobs:
-				  test:
-				    runs-on: ubuntu-latest
-				    strategy:
-				      matrix:
-				        node-version: [14.x, 16.x, 20.x]
-				    steps:
-				    - uses: actions/checkout@v3
-				    - name: Use Node.js ${{ matrix.node-version }}
-				      uses: actions/setup-node@v3
-				      with:
-				        node-version: ${{ matrix.node-version }}
-				    - run: npm ci
-				        - run: npm test
+		jobs:
+		  test:
+		    runs-on: ubuntu-latest
+		    strategy:
+		      matrix:
+		        node-version: [14.x, 16.x, 20.x]
+		    steps:
+		    - uses: actions/checkout@v3
+		    - name: Use Node.js ${{ matrix.node-version }}
+		      uses: actions/setup-node@v3
+		      with:
+		        node-version: ${{ matrix.node-version }}
+		    - run: npm ci
+		    - run: npm test
 		`,
 				}, */
-		// TODO: Fix array root document formatting before enabling this test
-		/* {
-					name: "ansible_playbook_style",
-					input: `---
-		- name: Configure web servers
-		  hosts: webservers
-		  become: yes
-		  vars:
-		    http_port: 80
-		    max_clients: 200
-		  tasks:
-		    - name: Install nginx
-		      package:
-		        name: nginx
-		        state: present
-		    - name: Start nginx service
-		      service:
-		        name: nginx
-		        state: started
-		        enabled: yes`,
-					key:      "vars.max_clients",
-					newValue: 500,
-					expectedOutput: `---
-		- name: Configure web servers
-		  hosts: webservers
-		  become: yes
-		  vars:
-		    http_port: 80
-		    max_clients: 500
-		  tasks:
-		    - name: Install nginx
-		      package:
-		        name: nginx
-		        state: present
-		    - name: Start nginx service
-		      service:
-		        name: nginx
-		        state: started
-		        enabled: yes
-		`,
-				}, */
+		{
+			name: "ansible_playbook_style",
+			input: `---
+- name: Configure web servers
+  hosts: webservers
+  become: yes
+  vars:
+    http_port: 80
+    max_clients: 200
+  tasks:
+    - name: Install nginx
+      package:
+        name: nginx
+        state: present
+    - name: Start nginx service
+      service:
+        name: nginx
+        state: started
+        enabled: yes`,
+			key:      "vars.max_clients",
+			newValue: 500,
+			expectedOutput: `---
+- name: Configure web servers
+  hosts: webservers
+  become: yes
+  vars:
+    http_port: 80
+    max_clients: 500
+  tasks:
+    - name: Install nginx
+      package:
+        name: nginx
+        state: present
+    - name: Start nginx service
+      service:
+        name: nginx
+        state: started
+        enabled: yes
+`,
+		},
 	}
 
 	for _, tt := range tests {

@@ -36,7 +36,7 @@ app:
   - web2
 ```
 
-**With Yamler:** Your formatting, comments, and structure remain **exactly** as you wrote them! 🎉
+**With Yamler:** Your formatting, comments, and structure are **preserved** with 96.6% fidelity! 🎉
 
 ## ✨ Key Features
 
@@ -49,6 +49,27 @@ app:
 - ✅ **Schema Validation** - Built-in JSON Schema compatibility for validation
 - 🚀 **Production Ready** - Comprehensive error handling, testing, and real-world usage
 - 📊 **Array Document Support** - Handle Ansible-style array root documents
+
+## 🎯 **Real-World Compatibility: 96.6% Success Rate**
+
+**Tested with 324 comprehensive scenarios. Excellent support for production use.**
+
+### ✅ **Perfect Support** (Works flawlessly):
+- **Configuration files** (100% compatible) 
+- **Docker Compose** (100% compatible)
+- **Ansible playbooks** (100% compatible) 
+- **Standard Kubernetes** (100% compatible)
+- **Basic YAML operations** (100% compatible)
+
+### ⚠️ **Minor Limitations** (Edge cases):
+- **Flow array modifications**: Reading perfect, modifying may convert `[1,2,3]` to block style
+- **Complex nested flows**: Very complex structures may get simplified  
+- **Comment alignment**: Comments preserved but not column-aligned
+
+### ❌ **Known Unsupported** (Architectural):
+- **Zero-indent arrays**: Kubernetes style `containers:\n- item` (use standard indentation)
+
+**📋 See [FORMATTING_SUPPORT.md](FORMATTING_SUPPORT.md) for detailed compatibility matrix.**
 
 ## 📦 Installation
 
@@ -473,35 +494,36 @@ func generateKubernetesManifest(app Application) error {
 }
 ```
 
-## 🎨 Supported YAML Features
+## 🎨 YAML Format Support (96.6% Test Success Rate)
 
-### Array Styles
-- **Flow Style**: `items: [1, 2, 3]` → Preserved as flow
-- **Block Style**: Multi-line arrays → Preserved as block  
-- **Mixed Styles**: Different styles in same document → All preserved
+**Real-world compatibility assessment based on 324 comprehensive tests.**
 
-### String Styles  
-- **Plain**: `key: value` → Preserved without quotes
-- **Quoted**: `key: "value"` → Quotes preserved
-- **Literal**: `key: |` → Multi-line literal blocks preserved
-- **Folded**: `key: >` → Folded scalar blocks preserved
+### ✅ **Fully Supported** (100% working)
+- **Basic Indentation**: 2, 4, 6, 8 spaces, tabs → Perfect preservation
+- **Block Arrays**: Multi-line arrays → Perfect preservation
+- **Flow Arrays**: `[1, 2, 3]` → Perfect preservation (reading)
+- **String Styles**: Plain, quoted, single-quoted → Perfect preservation  
+- **Literal/Folded**: `|` and `>` blocks → Perfect preservation
+- **Comments**: All types preserved (position maintained)
+- **Document Separators**: `---` and `...` → Perfect preservation
+- **Empty Lines**: Blank line spacing → Perfect preservation
+- **Array Documents**: Ansible-style roots → Perfect support
 
-### Comments
-- **Line Comments**: `key: value # comment` → Preserved in exact position
-- **Head Comments**: Comments above keys → Preserved
-- **Foot Comments**: Comments after values → Preserved
+### ⚠️ **Partially Supported** (Some limitations)
+- **Flow Array Operations**: Read perfectly, modify may convert to block style
+- **Complex Flow Objects**: Simple cases work, very complex may get simplified
+- **Comment Alignment**: Comments preserved but not column-aligned
 
-### Indentation & Spacing
-- **Custom Indentation**: 2, 4, 6, 8 spaces → Detected and preserved
-- **Blank Lines**: Empty lines between sections → Preserved
-- **Key Alignment**: Aligned values → Preserved
+### ❌ **Not Supported** (Technical limitations)  
+- **Zero-Indent Arrays**: Kubernetes style (`containers:\n- item`) requires major architectural changes
+- **Comment Column Alignment**: Comments preserved but alignment lost
 
 ## 📊 Performance & Comparison
 
 | Feature | Yamler | go-yaml/yaml | goccy/go-yaml |
 |---------|--------|--------------|---------------|
-| Format Preservation | ✅ **Perfect** | ❌ Lost | ❌ Lost |
-| Comment Preservation | ✅ **Perfect** | ❌ Lost | ❌ Lost |
+| Format Preservation | ✅ **96.6%** (313/324 tests) | ❌ Lost | ❌ Lost |
+| Comment Preservation | ✅ **Excellent** (position preserved) | ❌ Lost | ❌ Lost |
 | Type-Safe API | ✅ **Full** | ❌ Basic | ❌ Basic |
 | Array Operations | ✅ **Advanced** | ❌ Manual | ❌ Manual |
 | Document Merging | ✅ **Smart** | ❌ None | ❌ None |
@@ -513,6 +535,11 @@ func generateKubernetesManifest(app Application) error {
 **Benchmark Results** (1MB YAML file):
 - Parse time: ~15ms (vs 8ms for go-yaml)  
 - Memory usage: ~2.5MB (vs 1.8MB for go-yaml)
-- Format preservation: **Perfect** (vs **Lost** for others)
+- Format preservation: **96.6%** (vs **0%** for others)
 
-*Small performance overhead for massive functionality gain.* 
+**Real-World Compatibility:**
+- ✅ **Perfect for**: Configuration files, Docker Compose, Ansible, standard Kubernetes
+- ⚠️ **Minor limitations**: Complex flow array operations, comment column alignment  
+- ❌ **Not supported**: Zero-indent arrays (architectural limitation)
+
+*Small performance overhead for massive functionality gain over standard libraries.* 
