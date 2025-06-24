@@ -5,9 +5,38 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 
 	"gopkg.in/yaml.v3"
 )
+
+// Pool for reusing byte buffers to reduce allocations
+var bufferPool = sync.Pool{
+	New: func() interface{} {
+		return &bytes.Buffer{}
+	},
+}
+
+// Pool for reusing string builders
+var stringBuilderPool = sync.Pool{
+	New: func() interface{} {
+		return &strings.Builder{}
+	},
+}
+
+// Cache for parsed paths to avoid repeated string splitting
+var pathCache = sync.Map{} // string -> []string
+
+// parsePath splits a path and caches the result
+func parsePath(path string) []string {
+	if cached, ok := pathCache.Load(path); ok {
+		return cached.([]string)
+	}
+
+	parts := strings.Split(path, ".")
+	pathCache.Store(path, parts)
+	return parts
+}
 
 // Document represents a YAML document with preserved formatting
 type Document struct {
@@ -16,6 +45,8 @@ type Document struct {
 	arrayRoot                 bool
 	trailingNewlines          int
 	preserveDocumentSeparator bool // Whether to preserve document separators for array root documents
+	// Performance optimization: cache formatting info
+	formattingCache *FormattingInfo
 }
 
 // mappingRoot returns the root MappingNode of the document
@@ -202,7 +233,7 @@ func (d *Document) AddArrayElement(value interface{}) error {
 // setValueInNode sets a value in a specific node using a path
 func (d *Document) setValueInNode(node *yaml.Node, path string, value interface{}) error {
 	// This is a simplified version - could be extended to use the full Set logic
-	parts := strings.Split(path, ".")
+	parts := parsePath(path)
 	current := node
 
 	for i, part := range parts {
@@ -231,7 +262,7 @@ func (d *Document) setValueInNode(node *yaml.Node, path string, value interface{
 
 // getValueFromNode gets a value from a specific node using a path
 func (d *Document) getValueFromNode(node *yaml.Node, path string) (interface{}, error) {
-	parts := strings.Split(path, ".")
+	parts := parsePath(path)
 	current := node
 
 	for _, part := range parts {
@@ -307,16 +338,27 @@ func (d *Document) ToBytes() ([]byte, error) {
 		return []byte{}, nil
 	}
 
-	// Always encode with standard 2-space indentation first
-	var buf bytes.Buffer
-	encoder := yaml.NewEncoder(&buf)
+	// Get buffer from pool to reduce allocations
+	buf := bufferPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer bufferPool.Put(buf)
+
+	encoder := yaml.NewEncoder(buf)
 	encoder.SetIndent(2) // Always use 2 spaces for encoding
 
 	// Preserve original node styles before encoding
 	if d.raw != "" {
-		preserveNodeStyles(d.root, d.raw)
+		// Use cached formatting info or detect if not cached
+		var info *FormattingInfo
+		if d.formattingCache != nil {
+			info = d.formattingCache
+		} else {
+			info = detectFormattingInfoOptimized(d.raw)
+			d.formattingCache = info // Cache for future use
+		}
+
+		preserveNodeStylesWithInfo(d.root, info, "")
 		// Apply zero-indent arrays formatting to nodes before encoding
-		info := detectFormattingInfo(d.raw)
 		applyZeroIndentToNodes(d.root, info, "")
 	}
 
@@ -325,12 +367,20 @@ func (d *Document) ToBytes() ([]byte, error) {
 	}
 	encoder.Close()
 
-	result := buf.Bytes()
+	// Make a copy of the buffer contents
+	result := make([]byte, buf.Len())
+	copy(result, buf.Bytes())
 
 	// If we have raw content, apply formatting preservation
 	if d.raw != "" {
-		// Detect original formatting characteristics
-		indentInfo := detectFormattingInfo(d.raw)
+		// Use cached formatting info (already computed above)
+		var indentInfo *FormattingInfo
+		if d.formattingCache != nil {
+			indentInfo = d.formattingCache
+		} else {
+			indentInfo = detectFormattingInfoOptimized(d.raw)
+			d.formattingCache = indentInfo // Cache for future use
+		}
 
 		// Post-process to maintain original style characteristics
 		result = preserveOriginalFormatting(result, d.raw, indentInfo, d.preserveDocumentSeparator)
@@ -344,13 +394,20 @@ func (d *Document) ToBytes() ([]byte, error) {
 	// Add the correct number of trailing newlines
 	// YAML files should end with at least one newline per convention
 	if d.trailingNewlines > 0 {
-		result = append(result, bytes.Repeat([]byte("\n"), d.trailingNewlines)...)
+		// Pre-allocate with exact size needed
+		finalResult := make([]byte, len(result)+d.trailingNewlines)
+		copy(finalResult, result)
+		for i := len(result); i < len(finalResult); i++ {
+			finalResult[i] = '\n'
+		}
+		return finalResult, nil
 	} else {
 		// If no trailing newlines were detected, add one (YAML convention)
-		result = append(result, '\n')
+		finalResult := make([]byte, len(result)+1)
+		copy(finalResult, result)
+		finalResult[len(result)] = '\n'
+		return finalResult, nil
 	}
-
-	return result, nil
 }
 
 // FormattingInfo holds information about the original YAML formatting
@@ -366,9 +423,8 @@ type FormattingInfo struct {
 	HasDocumentEnd   bool                  // Whether the original had "..."
 }
 
-// detectFormattingInfo analyzes the raw YAML to determine formatting characteristics
-func detectFormattingInfo(raw string) *FormattingInfo {
-	lines := strings.Split(raw, "\n")
+// detectFormattingInfoOptimized is an optimized version with fewer allocations
+func detectFormattingInfoOptimized(raw string) *FormattingInfo {
 	info := &FormattingInfo{
 		IndentSize:       2,
 		UseTabs:          false,
@@ -381,174 +437,182 @@ func detectFormattingInfo(raw string) *FormattingInfo {
 		HasDocumentEnd:   false,
 	}
 
-	// Collect all indentation levels
-	var indentLevels []int
-	indentCounts := make(map[int]int)
+	// Pre-allocate slices with reasonable capacity
+	indentLevels := make([]int, 0, 32)
 
-	for i, line := range lines {
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
+	// Process raw string character by character to avoid multiple string operations
+	lines := 0
+	lineStart := 0
+	emptyLineCount := 0
 
-		// Detect indentation type and size
-		leadingSpaces := 0
-		leadingTabs := 0
-		for _, r := range line {
-			if r == ' ' {
-				leadingSpaces++
-			} else if r == '\t' {
-				leadingTabs++
-				info.UseTabs = true
+	for i := 0; i <= len(raw); i++ {
+		// End of line or end of string
+		if i == len(raw) || raw[i] == '\n' {
+			if i > lineStart {
+				line := raw[lineStart:i]
+				processLineOptimized(line, lines, emptyLineCount, info, &indentLevels)
+				emptyLineCount = 0
 			} else {
-				break
+				emptyLineCount++
 			}
-		}
-
-		// Collect indentation levels
-		if leadingSpaces > 0 && !info.UseTabs {
-			indentLevels = append(indentLevels, leadingSpaces)
-			indentCounts[leadingSpaces]++
-		} else if leadingTabs > 0 {
-			info.IndentSize = 4 // Standard tab equivalent
-		}
-
-		trimmed := strings.TrimSpace(line)
-
-		// Detect document separators
-		if trimmed == "---" {
-			info.HasDocumentStart = true
-		}
-		if trimmed == "..." {
-			info.HasDocumentEnd = true
-		}
-
-		// Detect flow styles
-		if strings.Contains(trimmed, "{") || strings.Contains(trimmed, "[") {
-			if strings.Contains(trimmed, ":") {
-				if idx := strings.Index(trimmed, ":"); idx > 0 {
-					key := strings.TrimSpace(trimmed[:idx])
-					info.FlowStyles[key] = true
-
-					// Check for multiline flow
-					if strings.HasSuffix(trimmed, "{") || strings.HasSuffix(trimmed, "[") {
-						info.MultilineFlow[key] = true
-					}
-				}
-			}
-		}
-
-		// Detect scalar styles (literal | or folded >)
-		if strings.Contains(trimmed, "|") || strings.Contains(trimmed, ">") {
-			if strings.Contains(trimmed, ":") {
-				if idx := strings.Index(trimmed, ":"); idx > 0 {
-					key := strings.TrimSpace(trimmed[:idx])
-					if strings.Contains(trimmed, "|") {
-						info.ScalarStyles[key] = yaml.LiteralStyle
-					} else if strings.Contains(trimmed, ">") {
-						info.ScalarStyles[key] = yaml.FoldedStyle
-					}
-				}
-			}
-		}
-
-		// Detect zero-indent arrays (Kubernetes/GitHub Actions style)
-		// Look for lines that are array elements immediately following a key
-		if strings.HasPrefix(trimmed, "- ") && i > 0 {
-			// Check previous non-empty line for a key
-			for j := i - 1; j >= 0; j-- {
-				prevLine := strings.TrimSpace(lines[j])
-				if prevLine == "" {
-					continue // Skip empty lines
-				}
-
-				if strings.Contains(prevLine, ":") && !strings.Contains(prevLine, "- ") {
-					if idx := strings.Index(prevLine, ":"); idx > 0 {
-						key := strings.TrimSpace(prevLine[:idx])
-						// Check if the array element has no additional indentation relative to the key
-						prevIndent := getLineIndentation(lines[j])
-						currentIndent := getLineIndentation(line)
-						if currentIndent == prevIndent {
-							info.ZeroIndentArrays[key] = true
-						}
-					}
-				}
-				break // Only check the immediately previous non-empty line
-			}
+			lines++
+			lineStart = i + 1
 		}
 	}
 
 	// Find the most common indentation increment if not using tabs
 	if !info.UseTabs && len(indentLevels) > 0 {
-		// Find the GCD of all indentation levels to get the base increment
-		baseIndent := findBaseIndentation(indentLevels)
+		baseIndent := findBaseIndentationOptimized(indentLevels)
 		if baseIndent > 0 {
 			info.IndentSize = baseIndent
-		}
-	}
-
-	// Count empty lines before each key
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed != "" && strings.Contains(trimmed, ":") {
-			if idx := strings.Index(trimmed, ":"); idx > 0 {
-				key := strings.TrimSpace(trimmed[:idx])
-
-				// Count consecutive empty lines before this key
-				emptyCount := 0
-				for j := i - 1; j >= 0; j-- {
-					if strings.TrimSpace(lines[j]) == "" {
-						emptyCount++
-					} else {
-						break
-					}
-				}
-
-				if emptyCount > 0 {
-					info.EmptyLines[key] = emptyCount
-				}
-			}
 		}
 	}
 
 	return info
 }
 
-// findBaseIndentation finds the greatest common divisor of indentation levels
-func findBaseIndentation(levels []int) int {
+// processLineOptimized processes a single line efficiently
+func processLineOptimized(line string, lineNum, emptyLinesBefore int, info *FormattingInfo, indentLevels *[]int) {
+	if len(line) == 0 {
+		return
+	}
+
+	// Count leading whitespace in one pass
+	leadingSpaces := 0
+	leadingTabs := 0
+	contentStart := 0
+
+	for i, r := range line {
+		if r == ' ' {
+			leadingSpaces++
+		} else if r == '\t' {
+			leadingTabs++
+			info.UseTabs = true
+		} else {
+			contentStart = i
+			break
+		}
+	}
+
+	// Skip empty lines
+	if contentStart >= len(line) {
+		return
+	}
+
+	content := line[contentStart:]
+
+	// Collect indentation levels
+	if leadingSpaces > 0 && !info.UseTabs {
+		*indentLevels = append(*indentLevels, leadingSpaces)
+	} else if leadingTabs > 0 {
+		info.IndentSize = 4
+	}
+
+	// Quick checks for common patterns
+	if len(content) >= 3 {
+		if content == "---" {
+			info.HasDocumentStart = true
+			return
+		}
+		if content == "..." {
+			info.HasDocumentEnd = true
+			return
+		}
+	}
+
+	// Find colon position efficiently
+	colonPos := -1
+	for i, r := range content {
+		if r == ':' {
+			colonPos = i
+			break
+		}
+	}
+
+	if colonPos <= 0 {
+		return
+	}
+
+	// Extract key efficiently
+	key := strings.TrimSpace(content[:colonPos])
+	if key == "" {
+		return
+	}
+
+	// Store empty lines count
+	if emptyLinesBefore > 0 {
+		info.EmptyLines[key] = emptyLinesBefore
+	}
+
+	// Check for flow styles, scalar styles in one pass
+	valueStart := colonPos + 1
+	if valueStart < len(content) {
+		value := content[valueStart:]
+
+		// Check for flow styles
+		if strings.ContainsAny(value, "{[") {
+			info.FlowStyles[key] = true
+			if strings.HasSuffix(strings.TrimSpace(value), "{") || strings.HasSuffix(strings.TrimSpace(value), "[") {
+				info.MultilineFlow[key] = true
+			}
+		}
+
+		// Check for scalar styles
+		trimmedValue := strings.TrimSpace(value)
+		if len(trimmedValue) > 0 {
+			switch trimmedValue[0] {
+			case '|':
+				info.ScalarStyles[key] = yaml.LiteralStyle
+			case '>':
+				info.ScalarStyles[key] = yaml.FoldedStyle
+			}
+		}
+	}
+}
+
+// findBaseIndentationOptimized finds GCD more efficiently
+func findBaseIndentationOptimized(levels []int) int {
 	if len(levels) == 0 {
 		return 2
 	}
 
-	// Find minimum non-zero level
-	minLevel := levels[0]
+	// Filter out zero levels and find the minimum non-zero level
+	nonZeroLevels := make([]int, 0, len(levels))
 	for _, level := range levels {
-		if level > 0 && level < minLevel {
-			minLevel = level
+		if level > 0 {
+			nonZeroLevels = append(nonZeroLevels, level)
 		}
 	}
 
-	// Check if minLevel is a valid base for all levels
-	for _, level := range levels {
-		if level%minLevel != 0 {
-			// Try common indentation sizes
-			for _, candidate := range []int{2, 3, 4, 6, 8} {
-				valid := true
-				for _, l := range levels {
-					if l%candidate != 0 {
-						valid = false
-						break
-					}
-				}
-				if valid {
-					return candidate
-				}
-			}
-			// Fallback to 2 if no pattern found
-			return 2
+	if len(nonZeroLevels) == 0 {
+		return 2
+	}
+
+	// Find GCD of all indentation levels
+	result := nonZeroLevels[0]
+	for i := 1; i < len(nonZeroLevels); i++ {
+		result = gcd(result, nonZeroLevels[i])
+		if result == 1 {
+			break
 		}
 	}
 
-	return minLevel
+	// Ensure result is reasonable (between 1 and 8)
+	if result < 1 {
+		result = 2
+	} else if result > 8 {
+		result = 8
+	}
+
+	return result
+}
+
+// gcd calculates the greatest common divisor
+func gcd(a, b int) int {
+	for b != 0 {
+		a, b = b, a%b
+	}
+	return a
 }
 
 // preserveNodeStyles recursively preserves original node styles
@@ -557,7 +621,7 @@ func preserveNodeStyles(node *yaml.Node, raw string) {
 		return
 	}
 
-	info := detectFormattingInfo(raw)
+	info := detectFormattingInfoOptimized(raw)
 	preserveNodeStylesWithInfo(node, info, "")
 }
 
@@ -1075,7 +1139,7 @@ func replaceMultilineFlow(content, key string, originalFlowLines []string) strin
 
 // detectIndentation analyzes the raw YAML to determine the indentation level
 func detectIndentation(raw string) int {
-	info := detectFormattingInfo(raw)
+	info := detectFormattingInfoOptimized(raw)
 	return info.IndentSize
 }
 
