@@ -77,6 +77,30 @@ app:
 go get github.com/Winter0rbit/yamler
 ```
 
+## 📂 Examples
+
+Comprehensive examples demonstrating all features are available in the [`examples/`](examples/) directory:
+
+- **[Basic Usage](examples/basic_usage/)** - Fundamental operations and type-safe getters
+- **[Comment Alignment](examples/comment_alignment/)** - Flexible comment formatting control
+- **[Docker Compose](examples/docker_compose/)** - Real-world container orchestration
+- **[Kubernetes](examples/kubernetes/)** - Manifest manipulation and scaling
+- **[Ansible](examples/ansible/)** - Playbook management (array-root documents)
+- **[Wildcard Patterns](examples/wildcard_patterns/)** - Bulk operations and pattern matching
+- **[File Operations](examples/file_operations/)** - File system integration and merging
+
+**Run all examples:**
+```bash
+cd examples
+./run_all.sh
+```
+
+**Or run individual examples:**
+```bash
+cd examples/docker_compose
+go run main.go
+```
+
 ## 🚀 Quick Start
 
 ```go

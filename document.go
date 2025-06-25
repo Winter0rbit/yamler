@@ -117,6 +117,11 @@ func Load(content string) (*Document, error) {
 		trailingNewlines: trailingNewlines,
 	}
 
+	// Initialize formatting cache if we have raw content
+	if content != "" {
+		doc.formattingCache = detectFormattingInfoOptimized(content)
+	}
+
 	// Detect if this is an array document root
 	if doc.isArrayRoot() {
 		doc.arrayRoot = true
@@ -410,6 +415,18 @@ func (d *Document) ToBytes() ([]byte, error) {
 	}
 }
 
+// CommentAlignmentMode defines how inline comments should be aligned
+type CommentAlignmentMode int
+
+const (
+	// CommentAlignmentRelative preserves original spacing between value and comment
+	CommentAlignmentRelative CommentAlignmentMode = iota
+	// CommentAlignmentAbsolute aligns all comments to the same column
+	CommentAlignmentAbsolute
+	// CommentAlignmentDisabled disables comment alignment processing
+	CommentAlignmentDisabled
+)
+
 // FormattingInfo holds information about the original YAML formatting
 type FormattingInfo struct {
 	IndentSize       int
@@ -421,6 +438,9 @@ type FormattingInfo struct {
 	ZeroIndentArrays map[string]bool       // Arrays that start without additional indentation
 	HasDocumentStart bool                  // Whether the original had "---"
 	HasDocumentEnd   bool                  // Whether the original had "..."
+	CommentAlignment map[string]int        // Spacing or column position for inline comments
+	CommentSpacing   int                   // Common spacing for comment alignment
+	AlignmentMode    CommentAlignmentMode  // How to align comments
 }
 
 // detectFormattingInfoOptimized is an optimized version with fewer allocations
@@ -435,28 +455,24 @@ func detectFormattingInfoOptimized(raw string) *FormattingInfo {
 		ZeroIndentArrays: make(map[string]bool),
 		HasDocumentStart: false,
 		HasDocumentEnd:   false,
+		CommentAlignment: make(map[string]int),
+		CommentSpacing:   0,
+		AlignmentMode:    CommentAlignmentRelative, // Default to relative alignment
 	}
 
 	// Pre-allocate slices with reasonable capacity
 	indentLevels := make([]int, 0, 32)
 
-	// Process raw string character by character to avoid multiple string operations
-	lines := 0
-	lineStart := 0
+	// Process lines to detect formatting patterns
+	lines := strings.Split(raw, "\n")
 	emptyLineCount := 0
 
-	for i := 0; i <= len(raw); i++ {
-		// End of line or end of string
-		if i == len(raw) || raw[i] == '\n' {
-			if i > lineStart {
-				line := raw[lineStart:i]
-				processLineOptimized(line, lines, emptyLineCount, info, &indentLevels)
-				emptyLineCount = 0
-			} else {
-				emptyLineCount++
-			}
-			lines++
-			lineStart = i + 1
+	for i, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			emptyLineCount++
+		} else {
+			processLineOptimized(line, i, emptyLineCount, info, &indentLevels)
+			emptyLineCount = 0
 		}
 	}
 
@@ -466,6 +482,11 @@ func detectFormattingInfoOptimized(raw string) *FormattingInfo {
 		if baseIndent > 0 {
 			info.IndentSize = baseIndent
 		}
+	}
+
+	// Calculate common comment alignment
+	if len(info.CommentAlignment) > 0 {
+		info.CommentSpacing = findCommonCommentAlignment(info.CommentAlignment)
 	}
 
 	return info
@@ -520,6 +541,16 @@ func processLineOptimized(line string, lineNum, emptyLinesBefore int, info *Form
 		}
 	}
 
+	// Handle standalone comments (like "# Application settings")
+	if strings.HasPrefix(content, "#") {
+		// Use the comment text as a key for empty line tracking
+		commentKey := strings.TrimSpace(content)
+		if emptyLinesBefore > 0 {
+			info.EmptyLines[commentKey] = emptyLinesBefore
+		}
+		return
+	}
+
 	// Find colon position efficiently
 	colonPos := -1
 	for i, r := range content {
@@ -544,10 +575,21 @@ func processLineOptimized(line string, lineNum, emptyLinesBefore int, info *Form
 		info.EmptyLines[key] = emptyLinesBefore
 	}
 
-	// Check for flow styles, scalar styles in one pass
+	// Check for flow styles, scalar styles, and comments in one pass
 	valueStart := colonPos + 1
 	if valueStart < len(content) {
 		value := content[valueStart:]
+
+		// Check for inline comments
+		if commentPos := strings.Index(value, "#"); commentPos >= 0 {
+			// For relative alignment, calculate spacing between value and comment
+			valueBeforeComment := value[:commentPos]
+			// Count trailing spaces in the value part
+			spacesBeforeComment := len(valueBeforeComment) - len(strings.TrimRight(valueBeforeComment, " "))
+			if spacesBeforeComment > 0 {
+				info.CommentAlignment[key] = spacesBeforeComment
+			}
+		}
 
 		// Check for flow styles
 		if strings.ContainsAny(value, "{[") {
@@ -613,6 +655,31 @@ func gcd(a, b int) int {
 		a, b = b, a%b
 	}
 	return a
+}
+
+// findCommonCommentAlignment finds the most common comment alignment column
+func findCommonCommentAlignment(alignments map[string]int) int {
+	if len(alignments) == 0 {
+		return 0
+	}
+
+	// Count frequency of each alignment position
+	counts := make(map[int]int)
+	for _, pos := range alignments {
+		counts[pos]++
+	}
+
+	// Find the most common alignment
+	maxCount := 0
+	commonAlignment := 0
+	for pos, count := range counts {
+		if count > maxCount {
+			maxCount = count
+			commonAlignment = pos
+		}
+	}
+
+	return commonAlignment
 }
 
 // preserveNodeStyles recursively preserves original node styles
@@ -744,6 +811,9 @@ func preserveOriginalFormatting(newContent []byte, original string, info *Format
 
 	// Apply zero-indent array formatting
 	newStr = applyZeroIndentArrays(newStr, info)
+
+	// Align inline comments
+	newStr = alignInlineComments(newStr, info)
 
 	// Restore document separators
 	newStr = restoreDocumentSeparators(newStr, info, original, preserveDocumentSeparator)
@@ -936,6 +1006,76 @@ func applyZeroIndentArrays(content string, info *FormattingInfo) string {
 	return strings.Join(lines, "\n")
 }
 
+// alignInlineComments aligns inline comments according to the specified mode
+func alignInlineComments(content string, info *FormattingInfo) string {
+	lines := strings.Split(content, "\n")
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		// Skip empty lines and comments-only lines
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+
+		// Look for lines with inline comments
+		if commentPos := strings.Index(line, "#"); commentPos >= 0 {
+			// Extract the part before the comment
+			beforeComment := line[:commentPos]
+			comment := line[commentPos:]
+
+			// Check if this line has a key that should be aligned
+			if colonPos := strings.Index(beforeComment, ":"); colonPos >= 0 {
+				key := strings.TrimSpace(beforeComment[:colonPos])
+
+				switch info.AlignmentMode {
+				case CommentAlignmentDisabled:
+					// Remove comments entirely
+					lines[i] = strings.TrimRight(beforeComment, " ")
+
+				case CommentAlignmentRelative:
+					// Relative alignment: preserve original spacing
+					if alignmentValue, exists := info.CommentAlignment[key]; exists && alignmentValue > 0 {
+						// Extract the value part after colon
+						valueStart := colonPos + 1
+						if valueStart < len(beforeComment) {
+							valuePart := beforeComment[valueStart:]
+							trimmedValue := strings.TrimSpace(valuePart)
+
+							// Reconstruct with exact spacing
+							keyPart := beforeComment[:colonPos] // Just up to colon
+							if len(trimmedValue) > 0 {
+								padding := strings.Repeat(" ", alignmentValue)
+								lines[i] = keyPart + ": " + trimmedValue + padding + comment
+							}
+						}
+					}
+
+				case CommentAlignmentAbsolute:
+					// Absolute alignment: align to specific column
+					targetColumn := info.CommentSpacing
+					if targetColumn > 0 {
+						// Remove trailing spaces from before comment
+						beforeComment = strings.TrimRight(beforeComment, " ")
+
+						// Add spaces to reach target column
+						spacesNeeded := targetColumn - len(beforeComment)
+						if spacesNeeded > 0 {
+							padding := strings.Repeat(" ", spacesNeeded)
+							lines[i] = beforeComment + padding + comment
+						} else {
+							// If we can't fit, use at least one space
+							lines[i] = beforeComment + " " + comment
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return strings.Join(lines, "\n")
+}
+
 // restoreDocumentSeparators adds back document separators if they were in the original
 func restoreDocumentSeparators(content string, info *FormattingInfo, originalContent string, preserveDocumentSeparator bool) string {
 	// Check if the original content actually starts with ---
@@ -1024,21 +1164,36 @@ func replaceFoldedScalar(content, key string, originalLines []string) string {
 	return content
 }
 
-// applyEmptyLinePatterns adds empty lines before specified keys
+// applyEmptyLinePatterns adds empty lines before specified keys and comments
 func applyEmptyLinePatterns(content string, info *FormattingInfo) string {
 	lines := strings.Split(content, "\n")
 	var result []string
 
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if trimmed != "" && strings.Contains(trimmed, ":") {
-			if idx := strings.Index(trimmed, ":"); idx > 0 {
-				key := strings.TrimSpace(trimmed[:idx])
+		var key string
+
+		// Handle both key-value pairs and standalone comments
+		if trimmed != "" {
+			if strings.HasPrefix(trimmed, "#") {
+				// Standalone comment
+				key = trimmed
+			} else if strings.Contains(trimmed, ":") {
+				// Key-value pair
+				if idx := strings.Index(trimmed, ":"); idx > 0 {
+					key = strings.TrimSpace(trimmed[:idx])
+				}
+			}
+
+			// Apply empty lines if needed
+			if key != "" {
 				emptyLinesCount := info.EmptyLines[key]
 				if emptyLinesCount > 0 && i > 0 && strings.TrimSpace(lines[i-1]) != "" {
-					// Add the specified number of empty lines
+					// Add the specified number of empty lines with same indentation as current line
+					currentIndent := getLineIndentation(line)
+					indentStr := strings.Repeat(" ", currentIndent)
 					for j := 0; j < emptyLinesCount; j++ {
-						result = append(result, "")
+						result = append(result, indentStr)
 					}
 				}
 			}
@@ -1343,6 +1498,39 @@ func copyNodeStyles(source, target *yaml.Node) {
 }
 
 // String returns the YAML document as a string
+// SetCommentAlignment configures how inline comments should be aligned
+func (d *Document) SetCommentAlignment(mode CommentAlignmentMode) {
+	if d.formattingCache == nil {
+		d.formattingCache = detectFormattingInfoOptimized(d.raw)
+	}
+	d.formattingCache.AlignmentMode = mode
+}
+
+// SetAbsoluteCommentAlignment aligns all comments to the specified column
+func (d *Document) SetAbsoluteCommentAlignment(column int) {
+	if d.formattingCache == nil {
+		d.formattingCache = detectFormattingInfoOptimized(d.raw)
+	}
+	d.formattingCache.AlignmentMode = CommentAlignmentAbsolute
+	d.formattingCache.CommentSpacing = column
+}
+
+// EnableRelativeCommentAlignment preserves original spacing between values and comments
+func (d *Document) EnableRelativeCommentAlignment() {
+	if d.formattingCache == nil {
+		d.formattingCache = detectFormattingInfoOptimized(d.raw)
+	}
+	d.formattingCache.AlignmentMode = CommentAlignmentRelative
+}
+
+// DisableCommentAlignment disables all comment alignment processing
+func (d *Document) DisableCommentAlignment() {
+	if d.formattingCache == nil {
+		d.formattingCache = detectFormattingInfoOptimized(d.raw)
+	}
+	d.formattingCache.AlignmentMode = CommentAlignmentDisabled
+}
+
 func (d *Document) String() (string, error) {
 	bytes, err := d.ToBytes()
 	if err != nil {
