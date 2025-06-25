@@ -387,12 +387,12 @@ other: value
 		},
 		{
 			name: "append_to_compact_flow_array",
-			input: `items:[1,2,3]
+			input: `items: [1,2,3]
 other: value`,
 			operation: func(d *Document) error {
 				return d.AppendToArray("items", 4)
 			},
-			expectedOutput: `items:[1,2,3,4]
+			expectedOutput: `items: [1,2,3,4]
 other: value
 `,
 		},

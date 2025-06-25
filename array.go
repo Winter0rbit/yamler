@@ -114,6 +114,13 @@ func getOrCreateArrayNode(root *yaml.Node, path string) (*yaml.Node, error) {
 
 // AppendToArray appends a value to an array at the specified path
 func (d *Document) AppendToArray(path string, value interface{}) error {
+	// Save the original array style before modification
+	originalStyle, err := d.getArrayStyle(path)
+	if err != nil {
+		// If we can't get the style, continue with default behavior
+		originalStyle = nil
+	}
+
 	root, err := d.mappingRoot()
 	if err != nil {
 		return err
@@ -147,6 +154,14 @@ func (d *Document) AppendToArray(path string, value interface{}) error {
 					return err
 				}
 				d.raw = string(content)
+
+				// Apply the original style if we had one
+				if originalStyle != nil {
+					err = d.applyArrayStyle(path, originalStyle)
+					if err != nil {
+						return err
+					}
+				}
 				return nil
 			}
 		}
@@ -172,6 +187,14 @@ func (d *Document) AppendToArray(path string, value interface{}) error {
 				return err
 			}
 			d.raw = string(content)
+
+			// Apply the original style if we had one
+			if originalStyle != nil {
+				err = d.applyArrayStyle(path, originalStyle)
+				if err != nil {
+					return err
+				}
+			}
 			return nil
 		}
 
@@ -193,6 +216,14 @@ func (d *Document) AppendToArray(path string, value interface{}) error {
 			return err
 		}
 		d.raw = string(content)
+
+		// Apply the original style if we had one
+		if originalStyle != nil {
+			err = d.applyArrayStyle(path, originalStyle)
+			if err != nil {
+				return err
+			}
+		}
 		return nil
 	}
 
@@ -214,6 +245,14 @@ func (d *Document) AppendToArray(path string, value interface{}) error {
 		return err
 	}
 	d.raw = string(content)
+
+	// Apply the original style if we had one
+	if originalStyle != nil {
+		err = d.applyArrayStyle(path, originalStyle)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -464,4 +503,95 @@ func getArrayNode(root *yaml.Node, path string) (*yaml.Node, error) {
 		return nil, fmt.Errorf("path %s: not an array", path)
 	}
 	return current, nil
+}
+
+// getArrayStyle detects the current style of an array
+func (d *Document) getArrayStyle(path string) (*ArrayStyle, error) {
+	// Check if we have cached style information
+	if d.formattingCache != nil && d.formattingCache.ArrayStyles != nil {
+		if style, exists := d.formattingCache.ArrayStyles[path]; exists {
+			return style, nil
+		}
+	}
+
+	// Fallback: analyze the current array in raw content
+	if d.raw != "" {
+		lines := strings.Split(d.raw, "\n")
+		for i, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if strings.Contains(trimmed, ":") {
+				if idx := strings.Index(trimmed, ":"); idx > 0 {
+					key := strings.TrimSpace(trimmed[:idx])
+					if key == path {
+						value := line[idx+1:]
+
+						style := &ArrayStyle{
+							Indentation: getLineIndentation(line),
+						}
+
+						if strings.Contains(value, "[") {
+							style.IsFlow = true
+							trimmedValue := strings.TrimSpace(value)
+
+							if strings.HasPrefix(trimmedValue, "[") && strings.HasSuffix(trimmedValue, "]") {
+								// Single line flow array
+								arrayContent := trimmedValue[1 : len(trimmedValue)-1]
+
+								// Check for spaces around elements
+								if strings.Contains(arrayContent, " , ") ||
+									(strings.HasPrefix(arrayContent, " ") && strings.HasSuffix(arrayContent, " ")) {
+									style.HasSpaces = true
+								} else if !strings.Contains(arrayContent, " ") {
+									style.IsCompact = true
+								}
+							} else if strings.HasSuffix(trimmedValue, "[") {
+								// Multiline flow array - check following lines
+								style.IsMultiline = true
+
+								// Look for closing bracket to determine if it's really multiline
+								for j := i + 1; j < len(lines); j++ {
+									nextLine := lines[j]
+									if strings.Contains(nextLine, "]") {
+										break
+									}
+								}
+							}
+						} else {
+							// Block style array
+							style.IsFlow = false
+						}
+
+						return style, nil
+					}
+				}
+			}
+		}
+	}
+
+	// Default style
+	return &ArrayStyle{
+		IsFlow:      false,
+		Indentation: 2,
+	}, nil
+}
+
+// applyArrayStyle applies the given style to an array in the content
+func (d *Document) applyArrayStyle(path string, style *ArrayStyle) error {
+	if style == nil {
+		return nil
+	}
+
+	// For now, we'll rely on the formatting preservation in ToBytes()
+	// The style information is already stored in FormattingInfo
+
+	// Update the cached style
+	if d.formattingCache == nil {
+		d.formattingCache = detectFormattingInfoOptimized(d.raw)
+	}
+	if d.formattingCache.ArrayStyles == nil {
+		d.formattingCache.ArrayStyles = make(map[string]*ArrayStyle)
+	}
+	d.formattingCache.ArrayStyles[path] = style
+
+	return nil
 }
