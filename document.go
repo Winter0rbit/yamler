@@ -452,6 +452,7 @@ type FormattingInfo struct {
 	AlignmentMode    CommentAlignmentMode   // How to align comments
 	ArrayStyles      map[string]*ArrayStyle // Array formatting styles
 	KeyIndents       map[string]int         // Exact indentation for each key
+	FlowObjectStyles map[string]string      // Original flow object strings to preserve exact formatting
 }
 
 // detectFormattingInfoOptimized is an optimized version with fewer allocations
@@ -471,6 +472,7 @@ func detectFormattingInfoOptimized(raw string) *FormattingInfo {
 		AlignmentMode:    CommentAlignmentRelative, // Default to relative alignment
 		ArrayStyles:      make(map[string]*ArrayStyle),
 		KeyIndents:       make(map[string]int),
+		FlowObjectStyles: make(map[string]string),
 	}
 
 	// Pre-allocate slices with reasonable capacity
@@ -646,19 +648,25 @@ func processLineOptimized(line string, lineNum, emptyLinesBefore int, info *Form
 
 		// Check for flow styles
 		if strings.ContainsAny(value, "{[") {
-			// Only mark as FlowStyles if it's a top-level key (not indented)
-			// Keys inside inline objects should not be marked as FlowStyles
-			if leadingSpaces == 0 {
-				info.FlowStyles[key] = true
+			// Mark as FlowStyles regardless of indentation level to preserve nested flow objects
+			info.FlowStyles[key] = true
 
-				// Only mark as MultilineFlow if the line actually ends with { or [
-				// AND doesn't contain the closing bracket/brace on the same line
-				trimmedValue := strings.TrimSpace(value)
-				if strings.HasSuffix(trimmedValue, "{") && !strings.Contains(trimmedValue, "}") {
-					info.MultilineFlow[key] = true
-				} else if strings.HasSuffix(trimmedValue, "[") && !strings.Contains(trimmedValue, "]") {
-					info.MultilineFlow[key] = true
-				}
+			// Store the original flow object string to preserve exact formatting
+			trimmedValue := strings.TrimSpace(value)
+
+			// Check if this is a complete flow object (contains both opening and closing brackets/braces)
+			if (strings.Contains(trimmedValue, "{") && strings.Contains(trimmedValue, "}")) ||
+				(strings.Contains(trimmedValue, "[") && strings.Contains(trimmedValue, "]")) {
+				// This is a single-line flow object, save the exact format
+				info.FlowObjectStyles[key] = trimmedValue
+			}
+
+			// Only mark as MultilineFlow if the line actually ends with { or [
+			// AND doesn't contain the closing bracket/brace on the same line
+			if strings.HasSuffix(trimmedValue, "{") && !strings.Contains(trimmedValue, "}") {
+				info.MultilineFlow[key] = true
+			} else if strings.HasSuffix(trimmedValue, "[") && !strings.Contains(trimmedValue, "]") {
+				info.MultilineFlow[key] = true
 			}
 		}
 
@@ -924,6 +932,9 @@ func preserveOriginalFormatting(newContent []byte, original string, info *Format
 
 	// Apply array styles
 	newStr = applyArrayStyles(newStr, info)
+
+	// Apply flow object styles to preserve spacing
+	newStr = applyFlowObjectStyles(newStr, info)
 
 	// Apply exact key indentations
 	newStr = applyExactIndentations(newStr, info)
@@ -2111,6 +2122,155 @@ func applyArrayStyles(content string, info *FormattingInfo) string {
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+// applyFlowObjectStyles applies original flow object formatting to preserve exact spacing
+func applyFlowObjectStyles(content string, info *FormattingInfo) string {
+	if len(info.FlowObjectStyles) == 0 {
+		return content
+	}
+
+	lines := strings.Split(content, "\n")
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.Contains(trimmed, ":") {
+			if idx := strings.Index(trimmed, ":"); idx > 0 {
+				key := strings.TrimSpace(trimmed[:idx])
+
+				// Check if this key has a preserved flow object style
+				if originalStyle, exists := info.FlowObjectStyles[key]; exists {
+					// Extract current value part
+					valueStart := strings.Index(line, ":") + 1
+					if valueStart < len(line) {
+						currentValue := strings.TrimSpace(line[valueStart:])
+
+						// Only apply to flow objects (with curly braces), not arrays (with square brackets)
+						// because arrays have their own handling logic
+						if strings.Contains(currentValue, "{") && strings.Contains(currentValue, "}") {
+
+							// Only replace if the original had different spacing
+							if currentValue != originalStyle {
+								// Check if we need to update values inside the flow object
+								updatedStyle := updateFlowObjectWithNewValues(originalStyle, currentValue)
+
+								// Replace the value part with the original style (with updated values if needed)
+								newLine := line[:valueStart] + " " + updatedStyle
+								lines[i] = newLine
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// updateFlowObjectWithNewValues updates values in original flow object while preserving formatting
+func updateFlowObjectWithNewValues(originalStyle, currentValue string) string {
+	// Extract values from current flow object
+	currentValues := extractFlowObjectValues(currentValue)
+
+	// If no values changed, return original style
+	if len(currentValues) == 0 {
+		return originalStyle
+	}
+
+	// Replace values in original style while preserving spacing
+	result := originalStyle
+	originalValues := extractFlowObjectValues(originalStyle)
+
+	// Update each value that has changed
+	for key, newValue := range currentValues {
+		if originalValue, exists := originalValues[key]; exists && originalValue != newValue {
+			// Replace the old value with new value while preserving surrounding formatting
+			result = replaceValueInFlowObject(result, key, originalValue, newValue)
+		}
+	}
+
+	return result
+}
+
+// extractFlowObjectValues extracts key-value pairs from flow object string
+func extractFlowObjectValues(flowStr string) map[string]string {
+	values := make(map[string]string)
+
+	// Remove outer braces/brackets
+	inner := flowStr
+	if strings.HasPrefix(inner, "{") && strings.HasSuffix(inner, "}") {
+		inner = inner[1 : len(inner)-1]
+	} else if strings.HasPrefix(inner, "[") && strings.HasSuffix(inner, "]") {
+		inner = inner[1 : len(inner)-1]
+	}
+
+	// Split by comma but be careful about nested structures
+	parts := splitFlowObjectParts(inner)
+
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if strings.Contains(part, ":") {
+			idx := strings.Index(part, ":")
+			key := strings.TrimSpace(part[:idx])
+			value := strings.TrimSpace(part[idx+1:])
+			values[key] = value
+		}
+	}
+
+	return values
+}
+
+// splitFlowObjectParts splits flow object content by commas, respecting nested structures
+func splitFlowObjectParts(content string) []string {
+	var parts []string
+	var current strings.Builder
+	depth := 0
+
+	for _, r := range content {
+		switch r {
+		case '{', '[':
+			depth++
+			current.WriteRune(r)
+		case '}', ']':
+			depth--
+			current.WriteRune(r)
+		case ',':
+			if depth == 0 {
+				parts = append(parts, current.String())
+				current.Reset()
+			} else {
+				current.WriteRune(r)
+			}
+		default:
+			current.WriteRune(r)
+		}
+	}
+
+	if current.Len() > 0 {
+		parts = append(parts, current.String())
+	}
+
+	return parts
+}
+
+// replaceValueInFlowObject replaces a specific value in flow object while preserving formatting
+func replaceValueInFlowObject(flowStr, key, oldValue, newValue string) string {
+	// Use simple string replacement pattern: "key: oldValue" -> "key: newValue"
+	// This preserves all the surrounding formatting
+	oldPattern := key + ": " + oldValue
+	newPattern := key + ": " + newValue
+
+	result := strings.Replace(flowStr, oldPattern, newPattern, 1)
+
+	// If that didn't work, try without space after colon
+	if result == flowStr {
+		oldPattern = key + ":" + oldValue
+		newPattern = key + ":" + newValue
+		result = strings.Replace(flowStr, oldPattern, newPattern, 1)
+	}
+
+	return result
 }
 
 // applyExactIndentations applies exact indentations for keys that had custom indents
