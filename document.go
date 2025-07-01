@@ -531,7 +531,87 @@ func detectFormattingInfoOptimized(raw string) *FormattingInfo {
 	}
 	info.KeyIndents = filteredKeyIndents
 
+	// Detect multiline flow objects after processing all lines
+	detectMultilineFlowObjects(lines, info)
+
 	return info
+}
+
+// detectMultilineFlowObjects finds and stores multiline flow objects like:
+//
+//	resources: {
+//	  cpu: 256,
+//	  memory: 256}
+func detectMultilineFlowObjects(lines []string, info *FormattingInfo) {
+	for i := 0; i < len(lines); i++ {
+		line := lines[i]
+		trimmed := strings.TrimSpace(line)
+
+		// Look for lines that end with { or [
+		if strings.Contains(trimmed, ":") && (strings.HasSuffix(trimmed, "{") || strings.HasSuffix(trimmed, "[")) {
+			colonPos := strings.Index(trimmed, ":")
+			if colonPos > 0 {
+				key := strings.TrimSpace(trimmed[:colonPos])
+				value := strings.TrimSpace(trimmed[colonPos+1:])
+
+				// Check if this starts a multiline flow object
+				if strings.HasSuffix(value, "{") && !strings.Contains(value, "}") {
+					// Found start of multiline flow object, now find the end
+					flowObject := collectMultilineFlowObject(lines, i, '{', '}')
+					if flowObject != "" {
+						info.FlowObjectStyles[key] = flowObject
+					}
+				} else if strings.HasSuffix(value, "[") && !strings.Contains(value, "]") {
+					// Found start of multiline flow array, now find the end
+					flowObject := collectMultilineFlowObject(lines, i, '[', ']')
+					if flowObject != "" {
+						info.FlowObjectStyles[key] = flowObject
+					}
+				}
+			}
+		}
+	}
+}
+
+// collectMultilineFlowObject collects a complete multiline flow object starting from startLine
+func collectMultilineFlowObject(lines []string, startLine int, openBrace, closeBrace rune) string {
+	var result strings.Builder
+	depth := 0
+
+	for i := startLine; i < len(lines); i++ {
+		line := lines[i]
+
+		if i == startLine {
+			// For the first line, only take the value part after the colon
+			if colonPos := strings.Index(line, ":"); colonPos >= 0 {
+				value := strings.TrimSpace(line[colonPos+1:])
+				result.WriteString(value)
+			}
+		} else {
+			// For subsequent lines, take the trimmed content
+			trimmed := strings.TrimSpace(line)
+			if trimmed != "" {
+				result.WriteString("\n")
+				result.WriteString(line)
+			}
+		}
+
+		// Count braces AFTER adding the line to result
+		for _, r := range line {
+			if r == openBrace {
+				depth++
+			} else if r == closeBrace {
+				depth--
+				// Check if we've closed all braces after processing this character
+				if depth == 0 {
+					return result.String()
+				}
+			}
+		}
+	}
+
+	// If we get here, we didn't find a complete object
+	return ""
 }
 
 // processLineOptimized processes a single line efficiently
@@ -654,7 +734,7 @@ func processLineOptimized(line string, lineNum, emptyLinesBefore int, info *Form
 			// Store the original flow object string to preserve exact formatting
 			trimmedValue := strings.TrimSpace(value)
 
-			// Check if this is a complete flow object (contains both opening and closing brackets/braces)
+			// Check if this is a complete single-line flow object
 			if (strings.Contains(trimmedValue, "{") && strings.Contains(trimmedValue, "}")) ||
 				(strings.Contains(trimmedValue, "[") && strings.Contains(trimmedValue, "]")) {
 				// This is a single-line flow object, save the exact format
@@ -2140,23 +2220,40 @@ func applyFlowObjectStyles(content string, info *FormattingInfo) string {
 
 				// Check if this key has a preserved flow object style
 				if originalStyle, exists := info.FlowObjectStyles[key]; exists {
-					// Extract current value part
+					// Extract current value part after the colon
 					valueStart := strings.Index(line, ":") + 1
 					if valueStart < len(line) {
 						currentValue := strings.TrimSpace(line[valueStart:])
 
-						// Only apply to flow objects (with curly braces), not arrays (with square brackets)
-						// because arrays have their own handling logic
-						if strings.Contains(currentValue, "{") && strings.Contains(currentValue, "}") {
+						// Only process if this is a flow object starting with {
+						if strings.HasPrefix(currentValue, "{") {
+							// Check if the current value is a single-line collapsed version
+							// like "{cpu: 512, memory: 512}" vs original multiline format
+							if !strings.Contains(currentValue, "\n") && strings.Contains(originalStyle, "\n") {
+								// This is a collapsed flow object, we need to extract new values
+								// and apply them to the original multiline format
+								newValues := extractFlowObjectValues(currentValue)
+								if len(newValues) > 0 {
+									// Update the original style with new values
+									updatedStyle := updateFlowObjectWithNewValues(originalStyle, newValues)
 
-							// Only replace if the original had different spacing
-							if currentValue != originalStyle {
-								// Check if we need to update values inside the flow object
-								updatedStyle := updateFlowObjectWithNewValues(originalStyle, currentValue)
-
-								// Replace the value part with the original style (with updated values if needed)
-								newLine := line[:valueStart] + " " + updatedStyle
-								lines[i] = newLine
+									// Replace the value part with updated multiline style
+									newLine := line[:valueStart] + " " + updatedStyle
+									lines[i] = newLine
+								}
+							} else if !strings.Contains(currentValue, "\n") && !strings.Contains(originalStyle, "\n") {
+								// Both are single-line - always apply original formatting with updated values
+								currentValues := extractFlowObjectValues(currentValue)
+								if len(currentValues) > 0 {
+									updatedStyle := updateFlowObjectWithNewValues(originalStyle, currentValues)
+									// Always replace to preserve original spacing, even if values didn't change
+									newLine := line[:valueStart] + " " + updatedStyle
+									lines[i] = newLine
+								} else {
+									// No values extracted, just use original style
+									newLine := line[:valueStart] + " " + originalStyle
+									lines[i] = newLine
+								}
 							}
 						}
 					}
@@ -2168,22 +2265,17 @@ func applyFlowObjectStyles(content string, info *FormattingInfo) string {
 	return strings.Join(lines, "\n")
 }
 
-// updateFlowObjectWithNewValues updates values in original flow object while preserving formatting
-func updateFlowObjectWithNewValues(originalStyle, currentValue string) string {
-	// Extract values from current flow object
-	currentValues := extractFlowObjectValues(currentValue)
-
-	// If no values changed, return original style
-	if len(currentValues) == 0 {
+// updateFlowObjectWithNewValues updates values in original flow object with new values map
+func updateFlowObjectWithNewValues(originalStyle string, newValues map[string]string) string {
+	if len(newValues) == 0 {
 		return originalStyle
 	}
 
-	// Replace values in original style while preserving spacing
 	result := originalStyle
 	originalValues := extractFlowObjectValues(originalStyle)
 
-	// Update each value that has changed
-	for key, newValue := range currentValues {
+	// Update each value that exists in the new values
+	for key, newValue := range newValues {
 		if originalValue, exists := originalValues[key]; exists && originalValue != newValue {
 			// Replace the old value with new value while preserving surrounding formatting
 			result = replaceValueInFlowObject(result, key, originalValue, newValue)
