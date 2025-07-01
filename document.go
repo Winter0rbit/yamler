@@ -45,6 +45,7 @@ type Document struct {
 	arrayRoot                 bool
 	trailingNewlines          int
 	preserveDocumentSeparator bool // Whether to preserve document separators for array root documents
+	exactTrailingNewlines     bool // Whether to preserve exact trailing newline behavior (from LoadBytes)
 	// Performance optimization: cache formatting info
 	formattingCache *FormattingInfo
 }
@@ -73,7 +74,13 @@ func LoadFile(filename string) (*Document, error) {
 
 // LoadBytes loads a YAML document from a byte slice and preserves its formatting
 func LoadBytes(content []byte) (*Document, error) {
-	return Load(string(content))
+	doc, err := Load(string(content))
+	if err != nil {
+		return nil, err
+	}
+	// Enable exact trailing newline preservation for file-based loading
+	doc.exactTrailingNewlines = true
+	return doc, nil
 }
 
 // Load parses a YAML string and preserves its formatting
@@ -396,17 +403,37 @@ func (d *Document) ToBytes() ([]byte, error) {
 		result = result[:len(result)-1]
 	}
 
-	// Add the correct number of trailing newlines (preserve original exactly)
-	if d.trailingNewlines > 0 {
+	// Add the correct number of trailing newlines
+	// Logic to handle different scenarios:
+	// 1. If original was empty - no trailing newlines
+	// 2. If original had trailing newlines - preserve exact count
+	// 3. If exactTrailingNewlines is enabled - preserve exactly (for file operations)
+	// 4. Otherwise - add one trailing newline (YAML standard)
+	var finalTrailingNewlines int
+	if d.raw == "" {
+		// Empty document - no trailing newlines
+		finalTrailingNewlines = 0
+	} else if d.trailingNewlines > 0 {
+		// Original had trailing newlines - preserve exact count
+		finalTrailingNewlines = d.trailingNewlines
+	} else if d.exactTrailingNewlines {
+		// Exact preservation mode (typically for file operations) - preserve exactly
+		finalTrailingNewlines = 0
+	} else {
+		// No trailing newlines in original - add one (YAML standard)
+		finalTrailingNewlines = 1
+	}
+
+	if finalTrailingNewlines > 0 {
 		// Pre-allocate with exact size needed
-		finalResult := make([]byte, len(result)+d.trailingNewlines)
+		finalResult := make([]byte, len(result)+finalTrailingNewlines)
 		copy(finalResult, result)
 		for i := len(result); i < len(finalResult); i++ {
 			finalResult[i] = '\n'
 		}
 		return finalResult, nil
 	} else {
-		// If no trailing newlines were detected, don't add any (preserve original)
+		// No trailing newlines needed
 		return result, nil
 	}
 }
