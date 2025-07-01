@@ -396,8 +396,7 @@ func (d *Document) ToBytes() ([]byte, error) {
 		result = result[:len(result)-1]
 	}
 
-	// Add the correct number of trailing newlines
-	// YAML files should end with at least one newline per convention
+	// Add the correct number of trailing newlines (preserve original exactly)
 	if d.trailingNewlines > 0 {
 		// Pre-allocate with exact size needed
 		finalResult := make([]byte, len(result)+d.trailingNewlines)
@@ -407,11 +406,8 @@ func (d *Document) ToBytes() ([]byte, error) {
 		}
 		return finalResult, nil
 	} else {
-		// If no trailing newlines were detected, add one (YAML convention)
-		finalResult := make([]byte, len(result)+1)
-		copy(finalResult, result)
-		finalResult[len(result)] = '\n'
-		return finalResult, nil
+		// If no trailing newlines were detected, don't add any (preserve original)
+		return result, nil
 	}
 }
 
@@ -1008,7 +1004,8 @@ func preserveOriginalFormatting(newContent []byte, original string, info *Format
 	}
 
 	// Preserve multiline flow formatting
-	newStr = preserveMultilineFlow(newStr, original, info)
+	// TODO: Fix path resolution issue - temporarily disabled
+	// newStr = preserveMultilineFlow(newStr, original, info)
 
 	// Apply array styles
 	newStr = applyArrayStyles(newStr, info)
@@ -1644,6 +1641,10 @@ func replaceMultilineFlowBlock(content, key string, originalBlock []string) stri
 
 	lines := strings.Split(content, "\n")
 
+	// Track document structure to build full paths for keys
+	pathStack := make([]string, 0)
+	indentStack := make([]int, 0)
+
 	// Find the key in new content
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
@@ -1657,7 +1658,27 @@ func replaceMultilineFlowBlock(content, key string, originalBlock []string) stri
 		}
 
 		lineKey := strings.TrimSpace(trimmed[:colonIdx])
-		if lineKey != key {
+		currentIndent := getLineIndentation(line)
+
+		// Update path stack based on indentation
+		for len(indentStack) > 0 && indentStack[len(indentStack)-1] >= currentIndent {
+			pathStack = pathStack[:len(pathStack)-1]
+			indentStack = indentStack[:len(indentStack)-1]
+		}
+
+		// Build full path
+		var fullPath string
+		if len(pathStack) > 0 {
+			fullPath = strings.Join(pathStack, ".") + "." + lineKey
+		} else {
+			fullPath = lineKey
+		}
+
+		// Check if this matches the target key (simple key or full path)
+		if lineKey != key && fullPath != key {
+			// Add current key to path stack for nested elements
+			pathStack = append(pathStack, lineKey)
+			indentStack = append(indentStack, currentIndent)
 			continue
 		}
 
@@ -2211,15 +2232,40 @@ func applyFlowObjectStyles(content string, info *FormattingInfo) string {
 	}
 
 	lines := strings.Split(content, "\n")
+	// Track document structure to build full paths for keys
+	pathStack := make([]string, 0)
+	indentStack := make([]int, 0)
 
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if strings.Contains(trimmed, ":") {
 			if idx := strings.Index(trimmed, ":"); idx > 0 {
 				key := strings.TrimSpace(trimmed[:idx])
+				currentIndent := getLineIndentation(line)
 
-				// Check if this key has a preserved flow object style
-				if originalStyle, exists := info.FlowObjectStyles[key]; exists {
+				// Update path stack based on indentation
+				for len(indentStack) > 0 && indentStack[len(indentStack)-1] >= currentIndent {
+					pathStack = pathStack[:len(pathStack)-1]
+					indentStack = indentStack[:len(indentStack)-1]
+				}
+
+				// Build full path
+				var fullPath string
+				if len(pathStack) > 0 {
+					fullPath = strings.Join(pathStack, ".") + "." + key
+				} else {
+					fullPath = key
+				}
+
+				// Check both the simple key and the full path for flow object styles
+				var originalStyle string
+				var exists bool
+				if originalStyle, exists = info.FlowObjectStyles[key]; !exists {
+					// If simple key doesn't exist, try the full path
+					originalStyle, exists = info.FlowObjectStyles[fullPath]
+				}
+
+				if exists {
 					// Extract current value part after the colon
 					valueStart := strings.Index(line, ":") + 1
 					if valueStart < len(line) {
@@ -2242,21 +2288,33 @@ func applyFlowObjectStyles(content string, info *FormattingInfo) string {
 									lines[i] = newLine
 								}
 							} else if !strings.Contains(currentValue, "\n") && !strings.Contains(originalStyle, "\n") {
-								// Both are single-line - always apply original formatting with updated values
+								// Both are single-line - apply original formatting with updated values
 								currentValues := extractFlowObjectValues(currentValue)
-								if len(currentValues) > 0 {
+								originalValues := extractFlowObjectValues(originalStyle)
+
+								// Only apply if values actually changed
+								valuesChanged := false
+								for k, newVal := range currentValues {
+									if origVal, ok := originalValues[k]; !ok || origVal != newVal {
+										valuesChanged = true
+										break
+									}
+								}
+
+								if valuesChanged {
 									updatedStyle := updateFlowObjectWithNewValues(originalStyle, currentValues)
-									// Always replace to preserve original spacing, even if values didn't change
 									newLine := line[:valueStart] + " " + updatedStyle
-									lines[i] = newLine
-								} else {
-									// No values extracted, just use original style
-									newLine := line[:valueStart] + " " + originalStyle
 									lines[i] = newLine
 								}
 							}
 						}
 					}
+				}
+
+				// Add current key to path stack for nested elements
+				if strings.Contains(line, ":") && !strings.HasSuffix(strings.TrimSpace(line), "}") {
+					pathStack = append(pathStack, key)
+					indentStack = append(indentStack, currentIndent)
 				}
 			}
 		}
