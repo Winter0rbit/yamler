@@ -208,7 +208,8 @@ func createMapNode(val map[string]interface{}) (*yaml.Node, error) {
 		Kind: yaml.MappingNode,
 		Tag:  "!!map",
 	}
-	// Sort keys to ensure consistent output
+	// Sort keys to ensure consistent output for new objects
+	// Order preservation for existing objects is handled elsewhere
 	keys := make([]string, 0, len(val))
 	for key := range val {
 		keys = append(keys, key)
