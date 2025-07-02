@@ -6,7 +6,7 @@ This document provides instructions for setting up GitHub Actions and branch pro
 
 The repository includes automated testing workflow in `.github/workflows/test.yml` that:
 
-- Tests on Go versions 1.19, 1.20, and 1.21
+- Tests on Go 1.21 (project version)
 - Runs linting with golangci-lint
 - Reports test coverage to Codecov
 - Runs on pushes and pull requests to main/develop branches
@@ -26,9 +26,7 @@ To ensure code quality and prevent direct pushes to main branch:
    - ✅ **Require status checks to pass before merging**
    - ✅ **Require branches to be up to date before merging**
    - Select required status checks:
-     - `test (1.19)`
-     - `test (1.20)` 
-     - `test (1.21)`
+     - `test`
      - `lint`
    - ✅ **Require pull request reviews before merging**
    - ✅ **Dismiss stale PR approvals when new commits are pushed**
@@ -51,7 +49,7 @@ gh auth login
 # Create branch protection rule
 gh api repos/:owner/:repo/branches/main/protection \
   --method PUT \
-  --field required_status_checks='{"strict":true,"contexts":["test (1.19)","test (1.20)","test (1.21)","lint"]}' \
+  --field required_status_checks='{"strict":true,"contexts":["test","lint"]}' \
   --field enforce_admins=true \
   --field required_pull_request_reviews='{"required_approving_review_count":1,"dismiss_stale_reviews":true}' \
   --field restrictions=null
