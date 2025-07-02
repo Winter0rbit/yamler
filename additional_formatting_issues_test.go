@@ -345,11 +345,7 @@ prod:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Known limitation: multiline flow objects don't update values
-			if tt.name == "No duplication when updating inline resources" {
-				t.Skip("Known limitation: multiline flow objects values don't update. " +
-					"Use standard YAML format instead: resources:\\n  cpu: 256\\n  memory: 256")
-			}
+			// Test multiline flow objects - should work now after fixes
 
 			doc, err := Load(tt.input)
 			if err != nil {

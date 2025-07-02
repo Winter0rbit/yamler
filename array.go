@@ -581,9 +581,6 @@ func (d *Document) applyArrayStyle(path string, style *ArrayStyle) error {
 		return nil
 	}
 
-	// For now, we'll rely on the formatting preservation in ToBytes()
-	// The style information is already stored in FormattingInfo
-
 	// Update the cached style
 	if d.formattingCache == nil {
 		d.formattingCache = detectFormattingInfoOptimized(d.raw)
@@ -593,5 +590,69 @@ func (d *Document) applyArrayStyle(path string, style *ArrayStyle) error {
 	}
 	d.formattingCache.ArrayStyles[path] = style
 
+	// If this is a multiline flow array, store the original format for later restoration
+	if style.IsFlow && style.IsMultiline {
+		if d.formattingCache.FlowObjectStyles == nil {
+			d.formattingCache.FlowObjectStyles = make(map[string]string)
+		}
+
+		// Try to find the original multiline format in the raw content
+		if originalFormat := d.findOriginalArrayFormat(path); originalFormat != "" {
+			d.formattingCache.FlowObjectStyles[path] = originalFormat
+		}
+	}
+
+	// Force re-application of formatting
+	content, err := d.ToBytes()
+	if err != nil {
+		return err
+	}
+	d.raw = string(content)
+
 	return nil
+}
+
+// findOriginalArrayFormat finds the original multiline array format in raw content
+func (d *Document) findOriginalArrayFormat(path string) string {
+	if d.raw == "" {
+		return ""
+	}
+
+	lines := strings.Split(d.raw, "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.Contains(trimmed, ":") {
+			if idx := strings.Index(trimmed, ":"); idx > 0 {
+				key := strings.TrimSpace(trimmed[:idx])
+				if key == path {
+					value := strings.TrimSpace(line[idx+1:])
+
+					// Check if this is the start of a multiline flow array
+					if strings.HasSuffix(value, "[") || (strings.Contains(value, "[") && !strings.Contains(value, "]")) {
+						// Collect the multiline array
+						var result strings.Builder
+
+						// Start from the opening bracket
+						if strings.Contains(value, "[") {
+							startIdx := strings.Index(value, "[")
+							result.WriteString(value[startIdx:])
+						}
+
+						// Continue collecting until we find the closing bracket
+						bracketCount := strings.Count(result.String(), "[") - strings.Count(result.String(), "]")
+
+						for j := i + 1; j < len(lines) && bracketCount > 0; j++ {
+							result.WriteString("\n")
+							result.WriteString(lines[j])
+							bracketCount += strings.Count(lines[j], "[") - strings.Count(lines[j], "]")
+						}
+
+						return result.String()
+					}
+				}
+			}
+		}
+	}
+
+	return ""
 }

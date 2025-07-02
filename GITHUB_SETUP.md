@@ -1,60 +1,67 @@
 # GitHub Repository Setup
 
-## Automatic Testing Setup
+This document provides instructions for setting up GitHub Actions and branch protection for the Yamler project.
 
-This repository is configured with GitHub Actions for automatic testing. The workflow runs:
-- On push to `main` and `develop` branches
-- On Pull Request creation targeting `main` and `develop` branches
+## GitHub Actions Setup
 
-## Branch Protection Rules
+The repository includes automated testing workflow in `.github/workflows/test.yml` that:
 
-To prevent merging PRs without passing tests, configure Branch Protection Rules:
+- Tests on Go versions 1.19, 1.20, and 1.21
+- Runs linting with golangci-lint
+- Reports test coverage to Codecov
+- Runs on pushes and pull requests to main/develop branches
 
-### Setup Steps:
+## Branch Protection Setup
 
-1. Go to **Settings** → **Branches** in your GitHub repository
-2. Click **Add rule** for the `main` branch
-3. Configure the following parameters:
+To ensure code quality and prevent direct pushes to main branch:
 
-#### Basic Settings:
-- ✅ **Require pull request reviews before merging**
-- ✅ **Require status checks to pass before merging**
-- ✅ **Require branches to be up to date before merging**
+### Manual Setup (via GitHub Web UI):
 
-#### Status Checks:
-In the "Status checks" section, add:
-- ✅ **test (1.19)** 
-- ✅ **test (1.20)**
-- ✅ **test (1.21)**
-- ✅ **lint**
+1. Go to your repository on GitHub
+2. Click **Settings** tab
+3. Click **Branches** in the left sidebar
+4. Click **Add rule** or **Add branch protection rule**
+5. Configure the rule:
+   - **Branch name pattern**: `main`
+   - ✅ **Require status checks to pass before merging**
+   - ✅ **Require branches to be up to date before merging**
+   - Select required status checks:
+     - `test (1.19)`
+     - `test (1.20)` 
+     - `test (1.21)`
+     - `lint`
+   - ✅ **Require pull request reviews before merging**
+   - ✅ **Dismiss stale PR approvals when new commits are pushed**
+   - ✅ **Require review from code owners** (if you have CODEOWNERS file)
+   - ✅ **Restrict pushes that create files larger than 100 MB**
+   - ✅ **Include administrators** (applies rules to admins too)
 
-#### Additional Settings:
-- ✅ **Restrict pushes that create files that exceed the path length limit**
-- ✅ **Require linear history** (optional)
-- ✅ **Include administrators** (so rules apply to everyone)
+6. Click **Create** to save the rule
 
-### Result:
-After setup:
-- Cannot merge PR until all tests pass
-- Cannot push directly to main
-- All changes must go through PRs
-
-## Alternative Setup via GitHub CLI:
-
-If you have GitHub CLI installed, you can configure via command:
+### Automated Setup (via GitHub CLI):
 
 ```bash
-gh api repos/Winter0rbit/yamler/branches/main/protection \
+# Install GitHub CLI if not already installed
+# macOS: brew install gh
+# Linux: see https://github.com/cli/cli/blob/trunk/docs/install_linux.md
+
+# Authenticate with GitHub
+gh auth login
+
+# Create branch protection rule
+gh api repos/:owner/:repo/branches/main/protection \
   --method PUT \
   --field required_status_checks='{"strict":true,"contexts":["test (1.19)","test (1.20)","test (1.21)","lint"]}' \
   --field enforce_admins=true \
-  --field required_pull_request_reviews='{"required_approving_review_count":1}' \
+  --field required_pull_request_reviews='{"required_approving_review_count":1,"dismiss_stale_reviews":true}' \
   --field restrictions=null
 ```
 
-## Verifying Setup:
+## Benefits
 
-1. Create a test PR with changes  
-2. Ensure status checks appear
-3. Try to merge before tests complete - should be blocked
-4. After tests pass - merge should be allowed 
+With this setup:
+- No code can be merged to main without passing all tests
+- All PRs require review before merging
+- Automated testing ensures code quality
+- Consistent formatting is enforced via linting
+- Coverage reports help track test completeness 

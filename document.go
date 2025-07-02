@@ -2206,9 +2206,23 @@ func applyArrayStyles(content string, info *FormattingInfo) string {
 				if style, exists := info.ArrayStyles[key]; exists && style.IsFlow && !isInsideInlineObject(lines, i) {
 					value := line[idx+1:]
 
-					// Find the array content
-					if strings.Contains(value, "[") && strings.Contains(value, "]") {
-						// Extract the array content
+					// Check if we have original multiline flow format stored
+					if originalFlow, exists := info.FlowObjectStyles[key]; exists && style.IsMultiline && strings.Contains(originalFlow, "\n") {
+						// This is a multiline flow array that was collapsed to single line
+						// But we need to check if the current content has changed and update accordingly
+						currentArrayContent := extractCurrentArrayElements(value)
+						originalArrayContent := extractCurrentArrayElements(originalFlow)
+
+						if !equalStringSlices(currentArrayContent, originalArrayContent) {
+							// Content has changed, update the multiline format with new elements
+							updatedFlow := updateMultilineFlowArrayWithElements(originalFlow, currentArrayContent)
+							lines[i] = line[:idx+1] + " " + updatedFlow
+						} else {
+							// Content is the same, restore original format
+							lines[i] = line[:idx+1] + " " + originalFlow
+						}
+					} else if strings.Contains(value, "[") && strings.Contains(value, "]") {
+						// Extract the array content for non-multiline arrays
 						start := strings.Index(value, "[")
 						end := strings.LastIndex(value, "]")
 						if start >= 0 && end > start {
@@ -2216,7 +2230,16 @@ func applyArrayStyles(content string, info *FormattingInfo) string {
 
 							// Apply the specific style
 							var newArrayContent string
-							if style.HasSpaces {
+							if style.IsMultiline && !strings.Contains(arrayContent, "\n") {
+								// Convert single-line to multiline
+								elements := strings.Split(arrayContent, ",")
+								for j, elem := range elements {
+									elements[j] = strings.TrimSpace(elem)
+								}
+								// Create multiline format
+								indent := "  " // 2-space indent for array elements
+								newArrayContent = "\n" + indent + strings.Join(elements, ",\n"+indent) + "\n"
+							} else if style.HasSpaces {
 								// Add spaces around elements: [1,2,3] -> [ 1 , 2 , 3 ]
 								elements := strings.Split(arrayContent, ",")
 								for j, elem := range elements {
@@ -2319,7 +2342,7 @@ func applyFlowObjectStyles(content string, info *FormattingInfo) string {
 								currentValues := extractFlowObjectValues(currentValue)
 								originalValues := extractFlowObjectValues(originalStyle)
 
-								// Only apply if values actually changed
+								// Check if values changed
 								valuesChanged := false
 								for k, newVal := range currentValues {
 									if origVal, ok := originalValues[k]; !ok || origVal != newVal {
@@ -2328,7 +2351,9 @@ func applyFlowObjectStyles(content string, info *FormattingInfo) string {
 									}
 								}
 
-								if valuesChanged {
+								// Always apply original formatting to preserve spaces, even if values didn't change
+								// This handles cases where YAML encoder strips spaces but we want to preserve them
+								if valuesChanged || currentValue != originalStyle {
 									updatedStyle := updateFlowObjectWithNewValues(originalStyle, currentValues)
 									newLine := line[:valueStart] + " " + updatedStyle
 									lines[i] = newLine
@@ -2756,4 +2781,83 @@ func (d *Document) String() (string, error) {
 		return "", err
 	}
 	return string(bytes), nil
+}
+
+// extractCurrentArrayElements extracts array elements from both single-line and multiline formats
+func extractCurrentArrayElements(arrayStr string) []string {
+	if arrayStr == "" {
+		return nil
+	}
+
+	// Remove leading/trailing whitespace
+	arrayStr = strings.TrimSpace(arrayStr)
+
+	// Check if it's a flow array
+	if !strings.HasPrefix(arrayStr, "[") || !strings.HasSuffix(arrayStr, "]") {
+		return nil
+	}
+
+	// Extract content between brackets
+	content := arrayStr[1 : len(arrayStr)-1]
+
+	// Split by comma and clean up
+	var elements []string
+	parts := splitFlowObjectParts(content)
+
+	for _, part := range parts {
+		element := strings.TrimSpace(part)
+		if element != "" {
+			elements = append(elements, element)
+		}
+	}
+
+	return elements
+}
+
+// updateMultilineFlowArrayWithElements updates a multiline flow array with new elements
+func updateMultilineFlowArrayWithElements(originalFlow string, newElements []string) string {
+	if len(newElements) == 0 {
+		return originalFlow
+	}
+
+	lines := strings.Split(originalFlow, "\n")
+	if len(lines) == 0 {
+		return originalFlow
+	}
+
+	// Find the indentation of array elements by looking at the first element line
+	var elementIndent string
+	for i := 1; i < len(lines)-1; i++ { // Skip first '[' and last ']' lines
+		line := lines[i]
+		if strings.TrimSpace(line) != "" {
+			// Get the indentation from the first non-empty element line
+			for j, r := range line {
+				if r != ' ' && r != '\t' {
+					elementIndent = line[:j]
+					break
+				}
+			}
+			break
+		}
+	}
+
+	// If we couldn't detect indentation, use default 2 spaces
+	if elementIndent == "" {
+		elementIndent = "  "
+	}
+
+	// Build new multiline array
+	result := "[\n"
+
+	for i, element := range newElements {
+		result += elementIndent + element
+		if i < len(newElements)-1 {
+			result += ","
+		}
+		result += "\n"
+	}
+
+	result += "]"
+
+	return result
 }

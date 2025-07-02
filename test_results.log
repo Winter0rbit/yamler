@@ -1,0 +1,832 @@
+=== RUN   TestResourcesFieldOrderPreservation
+=== RUN   TestResourcesFieldOrderPreservation/CPU_first,_then_memory_-_should_preserve_order
+=== RUN   TestResourcesFieldOrderPreservation/Cores_first,_then_memory_-_should_preserve_order
+=== RUN   TestResourcesFieldOrderPreservation/Mixed_CPU_and_memory_updates_-_preserve_original_order
+--- PASS: TestResourcesFieldOrderPreservation (0.00s)
+    --- PASS: TestResourcesFieldOrderPreservation/CPU_first,_then_memory_-_should_preserve_order (0.00s)
+    --- PASS: TestResourcesFieldOrderPreservation/Cores_first,_then_memory_-_should_preserve_order (0.00s)
+    --- PASS: TestResourcesFieldOrderPreservation/Mixed_CPU_and_memory_updates_-_preserve_original_order (0.00s)
+=== RUN   TestEmptyLinesPreservationBetweenSections
+=== RUN   TestEmptyLinesPreservationBetweenSections/Empty_lines_between_prod_and_test_sections
+=== RUN   TestEmptyLinesPreservationBetweenSections/Multiple_empty_lines_preservation
+--- PASS: TestEmptyLinesPreservationBetweenSections (0.00s)
+    --- PASS: TestEmptyLinesPreservationBetweenSections/Empty_lines_between_prod_and_test_sections (0.00s)
+    --- PASS: TestEmptyLinesPreservationBetweenSections/Multiple_empty_lines_preservation (0.00s)
+=== RUN   TestInlineVsMultilineFormatPreservation
+=== RUN   TestInlineVsMultilineFormatPreservation/Multiline_format_should_be_preserved_when_updating
+=== RUN   TestInlineVsMultilineFormatPreservation/Inline_format_should_be_preserved_when_updating
+=== RUN   TestInlineVsMultilineFormatPreservation/Mixed_formats_in_different_sections
+--- PASS: TestInlineVsMultilineFormatPreservation (0.00s)
+    --- PASS: TestInlineVsMultilineFormatPreservation/Multiline_format_should_be_preserved_when_updating (0.00s)
+    --- PASS: TestInlineVsMultilineFormatPreservation/Inline_format_should_be_preserved_when_updating (0.00s)
+    --- PASS: TestInlineVsMultilineFormatPreservation/Mixed_formats_in_different_sections (0.00s)
+=== RUN   TestNoDuplicationBug
+=== RUN   TestNoDuplicationBug/No_duplication_when_updating_inline_resources
+    additional_formatting_issues_test.go:350: Known limitation: multiline flow objects values don't update. Use standard YAML format instead: resources:\n  cpu: 256\n  memory: 256
+=== RUN   TestNoDuplicationBug/No_duplication_with_multiline_resources
+=== RUN   TestNoDuplicationBug/Sequential_updates_like_real_usage_pattern
+--- PASS: TestNoDuplicationBug (0.00s)
+    --- SKIP: TestNoDuplicationBug/No_duplication_when_updating_inline_resources (0.00s)
+    --- PASS: TestNoDuplicationBug/No_duplication_with_multiline_resources (0.00s)
+    --- PASS: TestNoDuplicationBug/Sequential_updates_like_real_usage_pattern (0.00s)
+=== RUN   TestRealUsagePattern
+--- PASS: TestRealUsagePattern (0.00s)
+=== RUN   TestArrayDocumentSupport
+=== RUN   TestArrayDocumentSupport/ansible_playbook_style
+=== RUN   TestArrayDocumentSupport/simple_array_document
+=== RUN   TestArrayDocumentSupport/add_element_to_array_document
+--- PASS: TestArrayDocumentSupport (0.00s)
+    --- PASS: TestArrayDocumentSupport/ansible_playbook_style (0.00s)
+    --- PASS: TestArrayDocumentSupport/simple_array_document (0.00s)
+    --- PASS: TestArrayDocumentSupport/add_element_to_array_document (0.00s)
+=== RUN   TestArrayDocumentGetters
+--- PASS: TestArrayDocumentGetters (0.00s)
+=== RUN   TestDocument_GetArrayLength
+=== RUN   TestDocument_GetArrayLength/get_empty_array_length
+=== RUN   TestDocument_GetArrayLength/get_array_length
+=== RUN   TestDocument_GetArrayLength/get_nested_array_length
+=== RUN   TestDocument_GetArrayLength/get_non-array_length
+=== RUN   TestDocument_GetArrayLength/get_non-existent_array_length
+--- PASS: TestDocument_GetArrayLength (0.00s)
+    --- PASS: TestDocument_GetArrayLength/get_empty_array_length (0.00s)
+    --- PASS: TestDocument_GetArrayLength/get_array_length (0.00s)
+    --- PASS: TestDocument_GetArrayLength/get_nested_array_length (0.00s)
+    --- PASS: TestDocument_GetArrayLength/get_non-array_length (0.00s)
+    --- PASS: TestDocument_GetArrayLength/get_non-existent_array_length (0.00s)
+=== RUN   TestDocument_AppendToArray
+=== RUN   TestDocument_AppendToArray/append_to_empty_array
+=== RUN   TestDocument_AppendToArray/append_to_array
+=== RUN   TestDocument_AppendToArray/append_to_nested_array
+=== RUN   TestDocument_AppendToArray/append_to_non-array
+=== RUN   TestDocument_AppendToArray/append_to_non-existent_path
+--- PASS: TestDocument_AppendToArray (0.00s)
+    --- PASS: TestDocument_AppendToArray/append_to_empty_array (0.00s)
+    --- PASS: TestDocument_AppendToArray/append_to_array (0.00s)
+    --- PASS: TestDocument_AppendToArray/append_to_nested_array (0.00s)
+    --- PASS: TestDocument_AppendToArray/append_to_non-array (0.00s)
+    --- PASS: TestDocument_AppendToArray/append_to_non-existent_path (0.00s)
+=== RUN   TestDocument_RemoveFromArray
+=== RUN   TestDocument_RemoveFromArray/remove_first_element
+=== RUN   TestDocument_RemoveFromArray/remove_middle_element
+=== RUN   TestDocument_RemoveFromArray/remove_last_element
+=== RUN   TestDocument_RemoveFromArray/remove_from_nested_array
+=== RUN   TestDocument_RemoveFromArray/remove_from_non-array
+=== RUN   TestDocument_RemoveFromArray/remove_from_non-existent_path
+=== RUN   TestDocument_RemoveFromArray/remove_with_negative_index
+=== RUN   TestDocument_RemoveFromArray/remove_with_out_of_bounds_index
+--- PASS: TestDocument_RemoveFromArray (0.00s)
+    --- PASS: TestDocument_RemoveFromArray/remove_first_element (0.00s)
+    --- PASS: TestDocument_RemoveFromArray/remove_middle_element (0.00s)
+    --- PASS: TestDocument_RemoveFromArray/remove_last_element (0.00s)
+    --- PASS: TestDocument_RemoveFromArray/remove_from_nested_array (0.00s)
+    --- PASS: TestDocument_RemoveFromArray/remove_from_non-array (0.00s)
+    --- PASS: TestDocument_RemoveFromArray/remove_from_non-existent_path (0.00s)
+    --- PASS: TestDocument_RemoveFromArray/remove_with_negative_index (0.00s)
+    --- PASS: TestDocument_RemoveFromArray/remove_with_out_of_bounds_index (0.00s)
+=== RUN   TestDocument_UpdateArrayElement
+=== RUN   TestDocument_UpdateArrayElement/update_first_element
+=== RUN   TestDocument_UpdateArrayElement/update_middle_element
+=== RUN   TestDocument_UpdateArrayElement/update_last_element
+=== RUN   TestDocument_UpdateArrayElement/update_nested_array_element
+=== RUN   TestDocument_UpdateArrayElement/update_non-array
+=== RUN   TestDocument_UpdateArrayElement/update_non-existent_path
+=== RUN   TestDocument_UpdateArrayElement/update_with_negative_index
+=== RUN   TestDocument_UpdateArrayElement/update_with_out_of_bounds_index
+--- PASS: TestDocument_UpdateArrayElement (0.00s)
+    --- PASS: TestDocument_UpdateArrayElement/update_first_element (0.00s)
+    --- PASS: TestDocument_UpdateArrayElement/update_middle_element (0.00s)
+    --- PASS: TestDocument_UpdateArrayElement/update_last_element (0.00s)
+    --- PASS: TestDocument_UpdateArrayElement/update_nested_array_element (0.00s)
+    --- PASS: TestDocument_UpdateArrayElement/update_non-array (0.00s)
+    --- PASS: TestDocument_UpdateArrayElement/update_non-existent_path (0.00s)
+    --- PASS: TestDocument_UpdateArrayElement/update_with_negative_index (0.00s)
+    --- PASS: TestDocument_UpdateArrayElement/update_with_out_of_bounds_index (0.00s)
+=== RUN   TestDocument_InsertIntoArray
+=== RUN   TestDocument_InsertIntoArray/insert_at_beginning
+=== RUN   TestDocument_InsertIntoArray/insert_in_middle
+=== RUN   TestDocument_InsertIntoArray/insert_at_end
+=== RUN   TestDocument_InsertIntoArray/insert_into_nested_array
+=== RUN   TestDocument_InsertIntoArray/insert_into_non-array
+=== RUN   TestDocument_InsertIntoArray/insert_into_non-existent_path
+=== RUN   TestDocument_InsertIntoArray/insert_with_negative_index
+=== RUN   TestDocument_InsertIntoArray/insert_with_out_of_bounds_index
+--- PASS: TestDocument_InsertIntoArray (0.00s)
+    --- PASS: TestDocument_InsertIntoArray/insert_at_beginning (0.00s)
+    --- PASS: TestDocument_InsertIntoArray/insert_in_middle (0.00s)
+    --- PASS: TestDocument_InsertIntoArray/insert_at_end (0.00s)
+    --- PASS: TestDocument_InsertIntoArray/insert_into_nested_array (0.00s)
+    --- PASS: TestDocument_InsertIntoArray/insert_into_non-array (0.00s)
+    --- PASS: TestDocument_InsertIntoArray/insert_into_non-existent_path (0.00s)
+    --- PASS: TestDocument_InsertIntoArray/insert_with_negative_index (0.00s)
+    --- PASS: TestDocument_InsertIntoArray/insert_with_out_of_bounds_index (0.00s)
+=== RUN   TestDocument_GetArrayElement
+=== RUN   TestDocument_GetArrayElement/get_string_element
+=== RUN   TestDocument_GetArrayElement/get_int_element
+=== RUN   TestDocument_GetArrayElement/get_float_element
+=== RUN   TestDocument_GetArrayElement/get_bool_element
+=== RUN   TestDocument_GetArrayElement/get_from_nested_array
+=== RUN   TestDocument_GetArrayElement/get_from_non-array
+=== RUN   TestDocument_GetArrayElement/get_from_non-existent_path
+=== RUN   TestDocument_GetArrayElement/get_with_negative_index
+=== RUN   TestDocument_GetArrayElement/get_with_out_of_bounds_index
+--- PASS: TestDocument_GetArrayElement (0.00s)
+    --- PASS: TestDocument_GetArrayElement/get_string_element (0.00s)
+    --- PASS: TestDocument_GetArrayElement/get_int_element (0.00s)
+    --- PASS: TestDocument_GetArrayElement/get_float_element (0.00s)
+    --- PASS: TestDocument_GetArrayElement/get_bool_element (0.00s)
+    --- PASS: TestDocument_GetArrayElement/get_from_nested_array (0.00s)
+    --- PASS: TestDocument_GetArrayElement/get_from_non-array (0.00s)
+    --- PASS: TestDocument_GetArrayElement/get_from_non-existent_path (0.00s)
+    --- PASS: TestDocument_GetArrayElement/get_with_negative_index (0.00s)
+    --- PASS: TestDocument_GetArrayElement/get_with_out_of_bounds_index (0.00s)
+=== RUN   TestDocument_GetTypedArrayElement
+=== RUN   TestDocument_GetTypedArrayElement/get_string_element
+=== RUN   TestDocument_GetTypedArrayElement/get_int_element
+=== RUN   TestDocument_GetTypedArrayElement/get_float_element
+=== RUN   TestDocument_GetTypedArrayElement/get_bool_element
+=== RUN   TestDocument_GetTypedArrayElement/get_string_as_int
+=== RUN   TestDocument_GetTypedArrayElement/get_string_as_float
+=== RUN   TestDocument_GetTypedArrayElement/get_string_as_bool
+=== RUN   TestDocument_GetTypedArrayElement/get_invalid_type
+=== RUN   TestDocument_GetTypedArrayElement/get_from_non-array
+=== RUN   TestDocument_GetTypedArrayElement/get_from_non-existent_path
+=== RUN   TestDocument_GetTypedArrayElement/get_with_negative_index
+=== RUN   TestDocument_GetTypedArrayElement/get_with_out_of_bounds_index
+--- PASS: TestDocument_GetTypedArrayElement (0.00s)
+    --- PASS: TestDocument_GetTypedArrayElement/get_string_element (0.00s)
+    --- PASS: TestDocument_GetTypedArrayElement/get_int_element (0.00s)
+    --- PASS: TestDocument_GetTypedArrayElement/get_float_element (0.00s)
+    --- PASS: TestDocument_GetTypedArrayElement/get_bool_element (0.00s)
+    --- PASS: TestDocument_GetTypedArrayElement/get_string_as_int (0.00s)
+    --- PASS: TestDocument_GetTypedArrayElement/get_string_as_float (0.00s)
+    --- PASS: TestDocument_GetTypedArrayElement/get_string_as_bool (0.00s)
+    --- PASS: TestDocument_GetTypedArrayElement/get_invalid_type (0.00s)
+    --- PASS: TestDocument_GetTypedArrayElement/get_from_non-array (0.00s)
+    --- PASS: TestDocument_GetTypedArrayElement/get_from_non-existent_path (0.00s)
+    --- PASS: TestDocument_GetTypedArrayElement/get_with_negative_index (0.00s)
+    --- PASS: TestDocument_GetTypedArrayElement/get_with_out_of_bounds_index (0.00s)
+=== RUN   TestCommentAlignmentModes
+=== RUN   TestCommentAlignmentModes/relative_alignment
+=== RUN   TestCommentAlignmentModes/absolute_alignment_column_25
+=== RUN   TestCommentAlignmentModes/disabled_alignment
+--- PASS: TestCommentAlignmentModes (0.00s)
+    --- PASS: TestCommentAlignmentModes/relative_alignment (0.00s)
+    --- PASS: TestCommentAlignmentModes/absolute_alignment_column_25 (0.00s)
+    --- PASS: TestCommentAlignmentModes/disabled_alignment (0.00s)
+=== RUN   TestLoadFile
+--- PASS: TestLoadFile (0.00s)
+=== RUN   TestLoadBytes
+--- PASS: TestLoadBytes (0.00s)
+=== RUN   TestLoad
+--- PASS: TestLoad (0.00s)
+=== RUN   TestLoadError
+=== RUN   TestLoadError/invalid_yaml
+=== RUN   TestLoadError/empty_content
+=== RUN   TestLoadError/valid_yaml
+--- PASS: TestLoadError (0.00s)
+    --- PASS: TestLoadError/invalid_yaml (0.00s)
+    --- PASS: TestLoadError/empty_content (0.00s)
+    --- PASS: TestLoadError/valid_yaml (0.00s)
+=== RUN   TestDocument_String
+=== RUN   TestDocument_String/simple_yaml
+=== RUN   TestDocument_String/complex_yaml_with_2-space_indentation
+=== RUN   TestDocument_String/complex_yaml_with_4-space_indentation
+--- PASS: TestDocument_String (0.00s)
+    --- PASS: TestDocument_String/simple_yaml (0.00s)
+    --- PASS: TestDocument_String/complex_yaml_with_2-space_indentation (0.00s)
+    --- PASS: TestDocument_String/complex_yaml_with_4-space_indentation (0.00s)
+=== RUN   TestDetectIndentation
+=== RUN   TestDetectIndentation/2-space_indentation
+=== RUN   TestDetectIndentation/4-space_indentation
+=== RUN   TestDetectIndentation/no_indentation
+=== RUN   TestDetectIndentation/mixed_indentation_-_first_wins
+--- PASS: TestDetectIndentation (0.00s)
+    --- PASS: TestDetectIndentation/2-space_indentation (0.00s)
+    --- PASS: TestDetectIndentation/4-space_indentation (0.00s)
+    --- PASS: TestDetectIndentation/no_indentation (0.00s)
+    --- PASS: TestDetectIndentation/mixed_indentation_-_first_wins (0.00s)
+=== RUN   TestPreserveFormatting
+    document_test.go:318: Original:
+        import: ../../infra/generic-platform/infra/common.group.yml
+        
+        type: database
+        
+        name: test-service
+        description: Database cluster for service test-service-*
+        
+        options:
+          test:
+            folder_id: folder-abc123def456
+            class: small.standard
+            disk_size: 16
+          prod:
+            folder_id: folder-abc123def456
+            class: micro.standard
+            disk_size: 24
+        
+        provides:
+          - name: api
+            protocol: tcp
+            description: Database API
+            port: 6379
+    document_test.go:319: Result:
+        import: ../../infra/generic-platform/infra/common.group.yml
+        
+        type: database
+        
+        name: test-service
+        description: Database cluster for service test-service-*
+        
+        options:
+          test:
+            folder_id: folder-abc123def456
+            class: medium.standard
+            disk_size: 32
+          prod:
+            folder_id: folder-abc123def456
+            class: large.standard
+            disk_size: 48
+        
+        provides:
+          - name: api
+            protocol: tcp
+            description: Database API
+            port: 6379
+--- PASS: TestPreserveFormatting (0.00s)
+=== RUN   TestInlineObjectSpacePreservation
+=== RUN   TestInlineObjectSpacePreservation/preserve_spaces_in_flow_objects
+    formatting_issues_test.go:62: Spaces in flow objects not preserved.
+        Got:
+        datacenters:
+          sas: { count: 3 }
+          vla: {count: 2}
+        
+        Want:
+        datacenters:
+          sas: { count: 3 }
+          vla: { count: 2 }
+=== RUN   TestInlineObjectSpacePreservation/preserve_spaces_in_nested_flow_objects
+    formatting_issues_test.go:62: Spaces in flow objects not preserved.
+        Got:
+        config:
+          databases:
+            prod: { host: localhost, port: 5434 }
+            test: {host: testhost, port: 5433}
+        
+        Want:
+        config:
+          databases:
+            prod: { host: localhost, port: 5434 }
+            test: { host: testhost, port: 5433 }
+--- FAIL: TestInlineObjectSpacePreservation (0.00s)
+    --- FAIL: TestInlineObjectSpacePreservation/preserve_spaces_in_flow_objects (0.00s)
+    --- FAIL: TestInlineObjectSpacePreservation/preserve_spaces_in_nested_flow_objects (0.00s)
+=== RUN   TestFieldOrderPreservation
+=== RUN   TestFieldOrderPreservation/preserve_field_order_when_updating_memory_then_cpu
+=== RUN   TestFieldOrderPreservation/preserve_field_order_when_updating_cpu_then_memory
+=== RUN   TestFieldOrderPreservation/preserve_complex_field_order
+--- PASS: TestFieldOrderPreservation (0.00s)
+    --- PASS: TestFieldOrderPreservation/preserve_field_order_when_updating_memory_then_cpu (0.00s)
+    --- PASS: TestFieldOrderPreservation/preserve_field_order_when_updating_cpu_then_memory (0.00s)
+    --- PASS: TestFieldOrderPreservation/preserve_complex_field_order (0.00s)
+=== RUN   TestInlineObjectFormatPreservation
+=== RUN   TestInlineObjectFormatPreservation/preserve_inline_format_when_updating_values
+=== RUN   TestInlineObjectFormatPreservation/preserve_inline_format_with_spaces
+=== RUN   TestInlineObjectFormatPreservation/preserve_inline_format_nested
+--- PASS: TestInlineObjectFormatPreservation (0.00s)
+    --- PASS: TestInlineObjectFormatPreservation/preserve_inline_format_when_updating_values (0.00s)
+    --- PASS: TestInlineObjectFormatPreservation/preserve_inline_format_with_spaces (0.00s)
+    --- PASS: TestInlineObjectFormatPreservation/preserve_inline_format_nested (0.00s)
+=== RUN   TestTrailingNewlinesInSectionsPreservation
+=== RUN   TestTrailingNewlinesInSectionsPreservation/preserve_section_spacing
+=== RUN   TestTrailingNewlinesInSectionsPreservation/preserve_multiple_newlines_between_sections
+--- PASS: TestTrailingNewlinesInSectionsPreservation (0.00s)
+    --- PASS: TestTrailingNewlinesInSectionsPreservation/preserve_section_spacing (0.00s)
+    --- PASS: TestTrailingNewlinesInSectionsPreservation/preserve_multiple_newlines_between_sections (0.00s)
+=== RUN   TestFormattingPreservation
+=== RUN   TestFormattingPreservation/preserve_flow_style_array
+=== RUN   TestFormattingPreservation/preserve_block_style_array
+=== RUN   TestFormattingPreservation/preserve_mixed_styles
+=== RUN   TestFormattingPreservation/preserve_nested_flow_arrays
+--- PASS: TestFormattingPreservation (0.00s)
+    --- PASS: TestFormattingPreservation/preserve_flow_style_array (0.00s)
+    --- PASS: TestFormattingPreservation/preserve_block_style_array (0.00s)
+    --- PASS: TestFormattingPreservation/preserve_mixed_styles (0.00s)
+    --- PASS: TestFormattingPreservation/preserve_nested_flow_arrays (0.00s)
+=== RUN   TestArrayOperationPreservesStyle
+=== RUN   TestArrayOperationPreservesStyle/append_to_flow_array_preserves_flow
+=== RUN   TestArrayOperationPreservesStyle/append_to_block_array_preserves_block
+=== RUN   TestArrayOperationPreservesStyle/update_flow_array_element
+=== RUN   TestArrayOperationPreservesStyle/update_block_array_element
+--- PASS: TestArrayOperationPreservesStyle (0.00s)
+    --- PASS: TestArrayOperationPreservesStyle/append_to_flow_array_preserves_flow (0.00s)
+    --- PASS: TestArrayOperationPreservesStyle/append_to_block_array_preserves_block (0.00s)
+    --- PASS: TestArrayOperationPreservesStyle/update_flow_array_element (0.00s)
+    --- PASS: TestArrayOperationPreservesStyle/update_block_array_element (0.00s)
+=== RUN   TestCommentPreservation
+=== RUN   TestCommentPreservation/preserve_comments_on_set
+=== RUN   TestCommentPreservation/preserve_comments_on_array_operations
+=== RUN   TestCommentPreservation/preserve_comments_on_flow_array_operations
+--- PASS: TestCommentPreservation (0.00s)
+    --- PASS: TestCommentPreservation/preserve_comments_on_set (0.00s)
+    --- PASS: TestCommentPreservation/preserve_comments_on_array_operations (0.00s)
+    --- PASS: TestCommentPreservation/preserve_comments_on_flow_array_operations (0.00s)
+=== RUN   TestKeyOrderPreservation
+=== RUN   TestKeyOrderPreservation/preserve_key_order_on_set
+=== RUN   TestKeyOrderPreservation/preserve_nested_key_order
+=== RUN   TestKeyOrderPreservation/add_new_key_at_end
+--- PASS: TestKeyOrderPreservation (0.00s)
+    --- PASS: TestKeyOrderPreservation/preserve_key_order_on_set (0.00s)
+    --- PASS: TestKeyOrderPreservation/preserve_nested_key_order (0.00s)
+    --- PASS: TestKeyOrderPreservation/add_new_key_at_end (0.00s)
+=== RUN   TestTrailingNewlinesPreservation
+=== RUN   TestTrailingNewlinesPreservation/preserve_single_trailing_newline
+=== RUN   TestTrailingNewlinesPreservation/preserve_multiple_trailing_newlines
+=== RUN   TestTrailingNewlinesPreservation/preserve_trailing_newlines_with_comments
+--- PASS: TestTrailingNewlinesPreservation (0.00s)
+    --- PASS: TestTrailingNewlinesPreservation/preserve_single_trailing_newline (0.00s)
+    --- PASS: TestTrailingNewlinesPreservation/preserve_multiple_trailing_newlines (0.00s)
+    --- PASS: TestTrailingNewlinesPreservation/preserve_trailing_newlines_with_comments (0.00s)
+=== RUN   TestCustomIndentationPreservation
+=== RUN   TestCustomIndentationPreservation/preserve_6_space_indentation
+=== RUN   TestCustomIndentationPreservation/preserve_8_space_indentation
+=== RUN   TestCustomIndentationPreservation/preserve_mixed_indentation_levels
+=== RUN   TestCustomIndentationPreservation/preserve_4_space_indentation
+--- PASS: TestCustomIndentationPreservation (0.00s)
+    --- PASS: TestCustomIndentationPreservation/preserve_6_space_indentation (0.00s)
+    --- PASS: TestCustomIndentationPreservation/preserve_8_space_indentation (0.00s)
+    --- PASS: TestCustomIndentationPreservation/preserve_mixed_indentation_levels (0.00s)
+    --- PASS: TestCustomIndentationPreservation/preserve_4_space_indentation (0.00s)
+=== RUN   TestInlineStructurePreservation
+=== RUN   TestInlineStructurePreservation/preserve_inline_object
+=== RUN   TestInlineStructurePreservation/preserve_nested_inline_objects
+=== RUN   TestInlineStructurePreservation/preserve_mixed_inline_and_block
+=== RUN   TestInlineStructurePreservation/preserve_inline_arrays_in_objects
+--- PASS: TestInlineStructurePreservation (0.00s)
+    --- PASS: TestInlineStructurePreservation/preserve_inline_object (0.00s)
+    --- PASS: TestInlineStructurePreservation/preserve_nested_inline_objects (0.00s)
+    --- PASS: TestInlineStructurePreservation/preserve_mixed_inline_and_block (0.00s)
+    --- PASS: TestInlineStructurePreservation/preserve_inline_arrays_in_objects (0.00s)
+=== RUN   TestComplexYamlFormatPreservation
+=== RUN   TestComplexYamlFormatPreservation/preserve_folded_scalars
+=== RUN   TestComplexYamlFormatPreservation/preserve_literal_scalars
+=== RUN   TestComplexYamlFormatPreservation/preserve_quoted_strings
+=== RUN   TestComplexYamlFormatPreservation/preserve_multiline_arrays
+=== RUN   TestComplexYamlFormatPreservation/preserve_complex_nested_flow
+    formatting_variants_test.go:354: Complex YAML format not preserved.
+        Got:
+        matrix: [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+        metadata: {
+          created: 2023-01-01,
+          author: user,
+          tags: [yaml, test, config]
+        }
+        version: 2
+        
+        Want:
+        matrix: [
+          [1, 2, 3],
+          [4, 5, 6],
+          [7, 8, 9]
+        ]
+        metadata: {
+          created: 2023-01-01,
+          author: user,
+          tags: [yaml, test, config]
+        }
+        version: 2
+--- FAIL: TestComplexYamlFormatPreservation (0.00s)
+    --- PASS: TestComplexYamlFormatPreservation/preserve_folded_scalars (0.00s)
+    --- PASS: TestComplexYamlFormatPreservation/preserve_literal_scalars (0.00s)
+    --- PASS: TestComplexYamlFormatPreservation/preserve_quoted_strings (0.00s)
+    --- PASS: TestComplexYamlFormatPreservation/preserve_multiline_arrays (0.00s)
+    --- FAIL: TestComplexYamlFormatPreservation/preserve_complex_nested_flow (0.00s)
+=== RUN   TestArrayOperationsWithCustomFormats
+=== RUN   TestArrayOperationsWithCustomFormats/append_to_multiline_flow_array
+    formatting_variants_test.go:450: Custom array format not preserved.
+        Got:
+        items: [item1, item2, item3, item4]
+        other: value
+        
+        Want:
+        items: [
+          item1,
+          item2,
+          item3,
+          item4
+        ]
+        other: value
+=== RUN   TestArrayOperationsWithCustomFormats/append_to_compact_flow_array
+=== RUN   TestArrayOperationsWithCustomFormats/append_to_custom_indented_array
+=== RUN   TestArrayOperationsWithCustomFormats/update_element_in_spaced_flow_array
+--- FAIL: TestArrayOperationsWithCustomFormats (0.00s)
+    --- FAIL: TestArrayOperationsWithCustomFormats/append_to_multiline_flow_array (0.00s)
+    --- PASS: TestArrayOperationsWithCustomFormats/append_to_compact_flow_array (0.00s)
+    --- PASS: TestArrayOperationsWithCustomFormats/append_to_custom_indented_array (0.00s)
+    --- PASS: TestArrayOperationsWithCustomFormats/update_element_in_spaced_flow_array (0.00s)
+=== RUN   TestDocumentLevelFormatting
+=== RUN   TestDocumentLevelFormatting/preserve_document_separators
+=== RUN   TestDocumentLevelFormatting/preserve_blank_lines
+=== RUN   TestDocumentLevelFormatting/preserve_comment_formatting
+--- PASS: TestDocumentLevelFormatting (0.00s)
+    --- PASS: TestDocumentLevelFormatting/preserve_document_separators (0.00s)
+    --- PASS: TestDocumentLevelFormatting/preserve_blank_lines (0.00s)
+    --- PASS: TestDocumentLevelFormatting/preserve_comment_formatting (0.00s)
+=== RUN   TestRealWorldFormats
+=== RUN   TestRealWorldFormats/docker_compose_style
+=== RUN   TestRealWorldFormats/ansible_playbook_style
+--- PASS: TestRealWorldFormats (0.00s)
+    --- PASS: TestRealWorldFormats/docker_compose_style (0.00s)
+    --- PASS: TestRealWorldFormats/ansible_playbook_style (0.00s)
+=== RUN   TestCompactFormats
+=== RUN   TestCompactFormats/compact_config
+=== RUN   TestCompactFormats/compact_arrays
+=== RUN   TestCompactFormats/mixed_compact_and_verbose
+--- PASS: TestCompactFormats (0.00s)
+    --- PASS: TestCompactFormats/compact_config (0.00s)
+    --- PASS: TestCompactFormats/compact_arrays (0.00s)
+    --- PASS: TestCompactFormats/mixed_compact_and_verbose (0.00s)
+=== RUN   TestStringStylePreservation
+=== RUN   TestStringStylePreservation/preserve_quoted_strings
+=== RUN   TestStringStylePreservation/preserve_special_characters
+--- PASS: TestStringStylePreservation (0.00s)
+    --- PASS: TestStringStylePreservation/preserve_quoted_strings (0.00s)
+    --- PASS: TestStringStylePreservation/preserve_special_characters (0.00s)
+=== RUN   TestAdvancedArrayOperations
+=== RUN   TestAdvancedArrayOperations/append_to_inline_array
+=== RUN   TestAdvancedArrayOperations/modify_nested_array_element
+=== RUN   TestAdvancedArrayOperations/remove_from_mixed_array
+--- PASS: TestAdvancedArrayOperations (0.00s)
+    --- PASS: TestAdvancedArrayOperations/append_to_inline_array (0.00s)
+    --- PASS: TestAdvancedArrayOperations/modify_nested_array_element (0.00s)
+    --- PASS: TestAdvancedArrayOperations/remove_from_mixed_array (0.00s)
+=== RUN   TestDocument_Get
+=== RUN   TestDocument_Get/get_string
+=== RUN   TestDocument_Get/get_int
+=== RUN   TestDocument_Get/get_float
+=== RUN   TestDocument_Get/get_bool
+=== RUN   TestDocument_Get/get_array
+=== RUN   TestDocument_Get/get_map
+=== RUN   TestDocument_Get/get_nested
+=== RUN   TestDocument_Get/get_non-existent
+=== RUN   TestDocument_Get/get_from_non-map
+--- PASS: TestDocument_Get (0.00s)
+    --- PASS: TestDocument_Get/get_string (0.00s)
+    --- PASS: TestDocument_Get/get_int (0.00s)
+    --- PASS: TestDocument_Get/get_float (0.00s)
+    --- PASS: TestDocument_Get/get_bool (0.00s)
+    --- PASS: TestDocument_Get/get_array (0.00s)
+    --- PASS: TestDocument_Get/get_map (0.00s)
+    --- PASS: TestDocument_Get/get_nested (0.00s)
+    --- PASS: TestDocument_Get/get_non-existent (0.00s)
+    --- PASS: TestDocument_Get/get_from_non-map (0.00s)
+=== RUN   TestDocument_GetString
+=== RUN   TestDocument_GetString/get_string
+=== RUN   TestDocument_GetString/get_non-string
+=== RUN   TestDocument_GetString/get_non-existent
+--- PASS: TestDocument_GetString (0.00s)
+    --- PASS: TestDocument_GetString/get_string (0.00s)
+    --- PASS: TestDocument_GetString/get_non-string (0.00s)
+    --- PASS: TestDocument_GetString/get_non-existent (0.00s)
+=== RUN   TestDocument_GetInt
+=== RUN   TestDocument_GetInt/get_int
+=== RUN   TestDocument_GetInt/get_string_int
+=== RUN   TestDocument_GetInt/get_non-int
+=== RUN   TestDocument_GetInt/get_non-existent
+--- PASS: TestDocument_GetInt (0.00s)
+    --- PASS: TestDocument_GetInt/get_int (0.00s)
+    --- PASS: TestDocument_GetInt/get_string_int (0.00s)
+    --- PASS: TestDocument_GetInt/get_non-int (0.00s)
+    --- PASS: TestDocument_GetInt/get_non-existent (0.00s)
+=== RUN   TestDocument_GetFloat
+=== RUN   TestDocument_GetFloat/get_float
+=== RUN   TestDocument_GetFloat/get_int_as_float
+=== RUN   TestDocument_GetFloat/get_string_float
+=== RUN   TestDocument_GetFloat/get_non-float
+=== RUN   TestDocument_GetFloat/get_non-existent
+--- PASS: TestDocument_GetFloat (0.00s)
+    --- PASS: TestDocument_GetFloat/get_float (0.00s)
+    --- PASS: TestDocument_GetFloat/get_int_as_float (0.00s)
+    --- PASS: TestDocument_GetFloat/get_string_float (0.00s)
+    --- PASS: TestDocument_GetFloat/get_non-float (0.00s)
+    --- PASS: TestDocument_GetFloat/get_non-existent (0.00s)
+=== RUN   TestDocument_GetBool
+=== RUN   TestDocument_GetBool/get_bool_true
+=== RUN   TestDocument_GetBool/get_bool_false
+=== RUN   TestDocument_GetBool/get_string_true
+=== RUN   TestDocument_GetBool/get_string_yes
+=== RUN   TestDocument_GetBool/get_string_1
+=== RUN   TestDocument_GetBool/get_string_on
+=== RUN   TestDocument_GetBool/get_string_false
+=== RUN   TestDocument_GetBool/get_string_no
+=== RUN   TestDocument_GetBool/get_string_0
+=== RUN   TestDocument_GetBool/get_string_off
+=== RUN   TestDocument_GetBool/get_invalid_string
+=== RUN   TestDocument_GetBool/get_non-bool
+=== RUN   TestDocument_GetBool/get_non-existent
+--- PASS: TestDocument_GetBool (0.00s)
+    --- PASS: TestDocument_GetBool/get_bool_true (0.00s)
+    --- PASS: TestDocument_GetBool/get_bool_false (0.00s)
+    --- PASS: TestDocument_GetBool/get_string_true (0.00s)
+    --- PASS: TestDocument_GetBool/get_string_yes (0.00s)
+    --- PASS: TestDocument_GetBool/get_string_1 (0.00s)
+    --- PASS: TestDocument_GetBool/get_string_on (0.00s)
+    --- PASS: TestDocument_GetBool/get_string_false (0.00s)
+    --- PASS: TestDocument_GetBool/get_string_no (0.00s)
+    --- PASS: TestDocument_GetBool/get_string_0 (0.00s)
+    --- PASS: TestDocument_GetBool/get_string_off (0.00s)
+    --- PASS: TestDocument_GetBool/get_invalid_string (0.00s)
+    --- PASS: TestDocument_GetBool/get_non-bool (0.00s)
+    --- PASS: TestDocument_GetBool/get_non-existent (0.00s)
+=== RUN   TestDocument_GetSlice
+=== RUN   TestDocument_GetSlice/get_string_slice
+=== RUN   TestDocument_GetSlice/get_int_slice
+=== RUN   TestDocument_GetSlice/get_mixed_slice
+=== RUN   TestDocument_GetSlice/get_non-slice
+=== RUN   TestDocument_GetSlice/get_non-existent
+--- PASS: TestDocument_GetSlice (0.00s)
+    --- PASS: TestDocument_GetSlice/get_string_slice (0.00s)
+    --- PASS: TestDocument_GetSlice/get_int_slice (0.00s)
+    --- PASS: TestDocument_GetSlice/get_mixed_slice (0.00s)
+    --- PASS: TestDocument_GetSlice/get_non-slice (0.00s)
+    --- PASS: TestDocument_GetSlice/get_non-existent (0.00s)
+=== RUN   TestDocument_GetMap
+=== RUN   TestDocument_GetMap/get_map
+=== RUN   TestDocument_GetMap/get_nested_map
+=== RUN   TestDocument_GetMap/get_non-map
+=== RUN   TestDocument_GetMap/get_non-existent
+--- PASS: TestDocument_GetMap (0.00s)
+    --- PASS: TestDocument_GetMap/get_map (0.00s)
+    --- PASS: TestDocument_GetMap/get_nested_map (0.00s)
+    --- PASS: TestDocument_GetMap/get_non-map (0.00s)
+    --- PASS: TestDocument_GetMap/get_non-existent (0.00s)
+=== RUN   TestDocument_Merge
+=== RUN   TestDocument_Merge/merge_simple_maps
+=== RUN   TestDocument_Merge/merge_with_overlap
+=== RUN   TestDocument_Merge/merge_nested_structures
+=== RUN   TestDocument_Merge/merge_arrays_(replace)
+=== RUN   TestDocument_Merge/preserve_comments
+--- PASS: TestDocument_Merge (0.00s)
+    --- PASS: TestDocument_Merge/merge_simple_maps (0.00s)
+    --- PASS: TestDocument_Merge/merge_with_overlap (0.00s)
+    --- PASS: TestDocument_Merge/merge_nested_structures (0.00s)
+    --- PASS: TestDocument_Merge/merge_arrays_(replace) (0.00s)
+    --- PASS: TestDocument_Merge/preserve_comments (0.00s)
+=== RUN   TestDocument_MergeAt
+=== RUN   TestDocument_MergeAt/merge_at_existing_path
+=== RUN   TestDocument_MergeAt/merge_at_new_path
+=== RUN   TestDocument_MergeAt/merge_at_root_level
+--- PASS: TestDocument_MergeAt (0.00s)
+    --- PASS: TestDocument_MergeAt/merge_at_existing_path (0.00s)
+    --- PASS: TestDocument_MergeAt/merge_at_new_path (0.00s)
+    --- PASS: TestDocument_MergeAt/merge_at_root_level (0.00s)
+=== RUN   TestDocument_MergeErrors
+--- PASS: TestDocument_MergeErrors (0.00s)
+=== RUN   TestMergeCommentPreservation
+--- PASS: TestMergeCommentPreservation (0.00s)
+=== RUN   TestPathResolutionIssues
+=== RUN   TestPathResolutionIssues/Path_resolution_should_not_modify_wrong_section
+=== RUN   TestPathResolutionIssues/Should_preserve_trailing_newline_presence
+--- PASS: TestPathResolutionIssues (0.00s)
+    --- PASS: TestPathResolutionIssues/Path_resolution_should_not_modify_wrong_section (0.00s)
+    --- PASS: TestPathResolutionIssues/Should_preserve_trailing_newline_presence (0.00s)
+=== RUN   TestDocument_Set
+=== RUN   TestDocument_Set/set_string
+=== RUN   TestDocument_Set/set_int
+=== RUN   TestDocument_Set/set_float
+=== RUN   TestDocument_Set/set_bool
+=== RUN   TestDocument_Set/set_slice
+=== RUN   TestDocument_Set/set_map
+=== RUN   TestDocument_Set/set_nested
+=== RUN   TestDocument_Set/set_new_nested
+=== RUN   TestDocument_Set/set_root
+--- PASS: TestDocument_Set (0.00s)
+    --- PASS: TestDocument_Set/set_string (0.00s)
+    --- PASS: TestDocument_Set/set_int (0.00s)
+    --- PASS: TestDocument_Set/set_float (0.00s)
+    --- PASS: TestDocument_Set/set_bool (0.00s)
+    --- PASS: TestDocument_Set/set_slice (0.00s)
+    --- PASS: TestDocument_Set/set_map (0.00s)
+    --- PASS: TestDocument_Set/set_nested (0.00s)
+    --- PASS: TestDocument_Set/set_new_nested (0.00s)
+    --- PASS: TestDocument_Set/set_root (0.00s)
+=== RUN   TestDocument_SetString
+=== RUN   TestDocument_SetString/set_string
+=== RUN   TestDocument_SetString/set_nested_string
+--- PASS: TestDocument_SetString (0.00s)
+    --- PASS: TestDocument_SetString/set_string (0.00s)
+    --- PASS: TestDocument_SetString/set_nested_string (0.00s)
+=== RUN   TestDocument_SetInt
+=== RUN   TestDocument_SetInt/set_int
+=== RUN   TestDocument_SetInt/set_nested_int
+--- PASS: TestDocument_SetInt (0.00s)
+    --- PASS: TestDocument_SetInt/set_int (0.00s)
+    --- PASS: TestDocument_SetInt/set_nested_int (0.00s)
+=== RUN   TestDocument_SetFloat
+=== RUN   TestDocument_SetFloat/set_float
+=== RUN   TestDocument_SetFloat/set_nested_float
+--- PASS: TestDocument_SetFloat (0.00s)
+    --- PASS: TestDocument_SetFloat/set_float (0.00s)
+    --- PASS: TestDocument_SetFloat/set_nested_float (0.00s)
+=== RUN   TestDocument_SetBool
+=== RUN   TestDocument_SetBool/set_bool_true
+=== RUN   TestDocument_SetBool/set_bool_false
+=== RUN   TestDocument_SetBool/set_nested_bool
+--- PASS: TestDocument_SetBool (0.00s)
+    --- PASS: TestDocument_SetBool/set_bool_true (0.00s)
+    --- PASS: TestDocument_SetBool/set_bool_false (0.00s)
+    --- PASS: TestDocument_SetBool/set_nested_bool (0.00s)
+=== RUN   TestDocument_SetStringSlice
+=== RUN   TestDocument_SetStringSlice/set_string_slice
+=== RUN   TestDocument_SetStringSlice/set_nested_string_slice
+--- PASS: TestDocument_SetStringSlice (0.00s)
+    --- PASS: TestDocument_SetStringSlice/set_string_slice (0.00s)
+    --- PASS: TestDocument_SetStringSlice/set_nested_string_slice (0.00s)
+=== RUN   TestDocument_SetIntSlice
+=== RUN   TestDocument_SetIntSlice/set_int_slice
+=== RUN   TestDocument_SetIntSlice/set_nested_int_slice
+--- PASS: TestDocument_SetIntSlice (0.00s)
+    --- PASS: TestDocument_SetIntSlice/set_int_slice (0.00s)
+    --- PASS: TestDocument_SetIntSlice/set_nested_int_slice (0.00s)
+=== RUN   TestDocument_SetFloatSlice
+=== RUN   TestDocument_SetFloatSlice/set_float_slice
+=== RUN   TestDocument_SetFloatSlice/set_nested_float_slice
+--- PASS: TestDocument_SetFloatSlice (0.00s)
+    --- PASS: TestDocument_SetFloatSlice/set_float_slice (0.00s)
+    --- PASS: TestDocument_SetFloatSlice/set_nested_float_slice (0.00s)
+=== RUN   TestDocument_SetBoolSlice
+=== RUN   TestDocument_SetBoolSlice/set_bool_slice
+=== RUN   TestDocument_SetBoolSlice/set_nested_bool_slice
+--- PASS: TestDocument_SetBoolSlice (0.00s)
+    --- PASS: TestDocument_SetBoolSlice/set_bool_slice (0.00s)
+    --- PASS: TestDocument_SetBoolSlice/set_nested_bool_slice (0.00s)
+=== RUN   TestDocument_SetMapSlice
+=== RUN   TestDocument_SetMapSlice/set_map_slice
+=== RUN   TestDocument_SetMapSlice/set_nested_map_slice
+--- PASS: TestDocument_SetMapSlice (0.00s)
+    --- PASS: TestDocument_SetMapSlice/set_map_slice (0.00s)
+    --- PASS: TestDocument_SetMapSlice/set_nested_map_slice (0.00s)
+=== RUN   TestValidation
+=== RUN   TestValidation/Basic_Types
+=== RUN   TestValidation/Complex_Schema
+--- PASS: TestValidation (0.00s)
+    --- PASS: TestValidation/Basic_Types (0.00s)
+    --- PASS: TestValidation/Complex_Schema (0.00s)
+=== RUN   TestLoadSchema
+=== RUN   TestLoadSchema/Load_Schema_from_String
+--- PASS: TestLoadSchema (0.00s)
+    --- PASS: TestLoadSchema/Load_Schema_from_String (0.00s)
+=== RUN   TestValidationRules
+--- PASS: TestValidationRules (0.00s)
+=== RUN   TestDocument_GetAll
+=== RUN   TestDocument_GetAll/single_wildcard
+=== RUN   TestDocument_GetAll/recursive_wildcard
+=== RUN   TestDocument_GetAll/nested_single_wildcard
+=== RUN   TestDocument_GetAll/exact_match
+--- PASS: TestDocument_GetAll (0.00s)
+    --- PASS: TestDocument_GetAll/single_wildcard (0.00s)
+    --- PASS: TestDocument_GetAll/recursive_wildcard (0.00s)
+    --- PASS: TestDocument_GetAll/nested_single_wildcard (0.00s)
+    --- PASS: TestDocument_GetAll/exact_match (0.00s)
+=== RUN   TestDocument_SetAll
+=== RUN   TestDocument_SetAll/set_all_debug_values
+=== RUN   TestDocument_SetAll/set_all_timeout_values
+--- PASS: TestDocument_SetAll (0.00s)
+    --- PASS: TestDocument_SetAll/set_all_debug_values (0.00s)
+    --- PASS: TestDocument_SetAll/set_all_timeout_values (0.00s)
+=== RUN   TestDocument_GetKeys
+=== RUN   TestDocument_GetKeys/get_all_debug_keys
+=== RUN   TestDocument_GetKeys/get_app_keys
+--- PASS: TestDocument_GetKeys (0.00s)
+    --- PASS: TestDocument_GetKeys/get_all_debug_keys (0.00s)
+    --- PASS: TestDocument_GetKeys/get_app_keys (0.00s)
+=== RUN   TestDocument_GetPathsRecursive
+--- PASS: TestDocument_GetPathsRecursive (0.00s)
+=== RUN   TestWildcardPatternMatching
+=== RUN   TestWildcardPatternMatching/app.name_matches_app.name
+=== RUN   TestWildcardPatternMatching/app.name_matches_app.*
+=== RUN   TestWildcardPatternMatching/app.settings.debug_matches_app.*
+=== RUN   TestWildcardPatternMatching/app.settings.debug_matches_app.**
+=== RUN   TestWildcardPatternMatching/app.settings.debug_matches_**.debug
+=== RUN   TestWildcardPatternMatching/config.development.debug_matches_**.debug
+=== RUN   TestWildcardPatternMatching/servers[0].name_matches_servers.*
+=== RUN   TestWildcardPatternMatching/servers[0].name_matches_servers.*.name
+=== RUN   TestWildcardPatternMatching/app.name_matches_config.*
+=== RUN   TestWildcardPatternMatching/very.deep.nested.value_matches_**.value
+=== RUN   TestWildcardPatternMatching/very.deep.nested.value_matches_very.**.value
+=== RUN   TestWildcardPatternMatching/very.deep.nested.value_matches_very.deep.*
+=== RUN   TestWildcardPatternMatching/very.deep.nested.value_matches_very.deep.**
+--- PASS: TestWildcardPatternMatching (0.00s)
+    --- PASS: TestWildcardPatternMatching/app.name_matches_app.name (0.00s)
+    --- PASS: TestWildcardPatternMatching/app.name_matches_app.* (0.00s)
+    --- PASS: TestWildcardPatternMatching/app.settings.debug_matches_app.* (0.00s)
+    --- PASS: TestWildcardPatternMatching/app.settings.debug_matches_app.** (0.00s)
+    --- PASS: TestWildcardPatternMatching/app.settings.debug_matches_**.debug (0.00s)
+    --- PASS: TestWildcardPatternMatching/config.development.debug_matches_**.debug (0.00s)
+    --- PASS: TestWildcardPatternMatching/servers[0].name_matches_servers.* (0.00s)
+    --- PASS: TestWildcardPatternMatching/servers[0].name_matches_servers.*.name (0.00s)
+    --- PASS: TestWildcardPatternMatching/app.name_matches_config.* (0.00s)
+    --- PASS: TestWildcardPatternMatching/very.deep.nested.value_matches_**.value (0.00s)
+    --- PASS: TestWildcardPatternMatching/very.deep.nested.value_matches_very.**.value (0.00s)
+    --- PASS: TestWildcardPatternMatching/very.deep.nested.value_matches_very.deep.* (0.00s)
+    --- PASS: TestWildcardPatternMatching/very.deep.nested.value_matches_very.deep.** (0.00s)
+=== RUN   TestFilterByPattern
+=== RUN   TestFilterByPattern/app.*
+=== RUN   TestFilterByPattern/**.debug
+--- PASS: TestFilterByPattern (0.00s)
+    --- PASS: TestFilterByPattern/app.* (0.00s)
+    --- PASS: TestFilterByPattern/**.debug (0.00s)
+=== RUN   TestYAMLPreservation
+=== RUN   TestYAMLPreservation/db.host
+=== RUN   TestYAMLPreservation/db.port
+=== RUN   TestYAMLPreservation/db.credentials.username
+=== RUN   TestYAMLPreservation/app.name
+=== RUN   TestYAMLPreservation/app.env
+--- PASS: TestYAMLPreservation (0.00s)
+    --- PASS: TestYAMLPreservation/db.host (0.00s)
+    --- PASS: TestYAMLPreservation/db.port (0.00s)
+    --- PASS: TestYAMLPreservation/db.credentials.username (0.00s)
+    --- PASS: TestYAMLPreservation/app.name (0.00s)
+    --- PASS: TestYAMLPreservation/app.env (0.00s)
+=== RUN   TestErrorHandling
+=== RUN   TestErrorHandling/invalid_yaml
+=== RUN   TestErrorHandling/non-existent_path
+=== RUN   TestErrorHandling/invalid_path
+--- PASS: TestErrorHandling (0.00s)
+    --- PASS: TestErrorHandling/invalid_yaml (0.00s)
+    --- PASS: TestErrorHandling/non-existent_path (0.00s)
+    --- PASS: TestErrorHandling/invalid_path (0.00s)
+=== RUN   TestNewKeyCreation
+=== RUN   TestNewKeyCreation/new_key
+=== RUN   TestNewKeyCreation/nested.key
+=== RUN   TestNewKeyCreation/deeply.nested.key
+--- PASS: TestNewKeyCreation (0.00s)
+    --- PASS: TestNewKeyCreation/new_key (0.00s)
+    --- PASS: TestNewKeyCreation/nested.key (0.00s)
+    --- PASS: TestNewKeyCreation/deeply.nested.key (0.00s)
+=== RUN   TestDifferentTypes
+=== RUN   TestDifferentTypes/string
+=== RUN   TestDifferentTypes/int
+=== RUN   TestDifferentTypes/float
+=== RUN   TestDifferentTypes/bool
+=== RUN   TestDifferentTypes/array
+=== RUN   TestDifferentTypes/map
+--- PASS: TestDifferentTypes (0.00s)
+    --- PASS: TestDifferentTypes/string (0.00s)
+    --- PASS: TestDifferentTypes/int (0.00s)
+    --- PASS: TestDifferentTypes/float (0.00s)
+    --- PASS: TestDifferentTypes/bool (0.00s)
+    --- PASS: TestDifferentTypes/array (0.00s)
+    --- PASS: TestDifferentTypes/map (0.00s)
+=== RUN   TestComplexStructures
+=== RUN   TestComplexStructures/complex.string
+=== RUN   TestComplexStructures/complex.number
+=== RUN   TestComplexStructures/complex.float
+=== RUN   TestComplexStructures/complex.bool
+=== RUN   TestComplexStructures/complex.array[0]
+=== RUN   TestComplexStructures/complex.array[1]
+=== RUN   TestComplexStructures/complex.array[2]
+=== RUN   TestComplexStructures/complex.array[3].nested
+=== RUN   TestComplexStructures/complex.nested.key1
+=== RUN   TestComplexStructures/complex.nested.key2
+=== RUN   TestComplexStructures/complex.nested.key3[0]
+=== RUN   TestComplexStructures/complex.nested.key3[1]
+--- PASS: TestComplexStructures (0.00s)
+    --- PASS: TestComplexStructures/complex.string (0.00s)
+    --- PASS: TestComplexStructures/complex.number (0.00s)
+    --- PASS: TestComplexStructures/complex.float (0.00s)
+    --- PASS: TestComplexStructures/complex.bool (0.00s)
+    --- PASS: TestComplexStructures/complex.array[0] (0.00s)
+    --- PASS: TestComplexStructures/complex.array[1] (0.00s)
+    --- PASS: TestComplexStructures/complex.array[2] (0.00s)
+    --- PASS: TestComplexStructures/complex.array[3].nested (0.00s)
+    --- PASS: TestComplexStructures/complex.nested.key1 (0.00s)
+    --- PASS: TestComplexStructures/complex.nested.key2 (0.00s)
+    --- PASS: TestComplexStructures/complex.nested.key3[0] (0.00s)
+    --- PASS: TestComplexStructures/complex.nested.key3[1] (0.00s)
+=== RUN   TestEmptyDocument
+--- PASS: TestEmptyDocument (0.00s)
+=== RUN   TestSpecialCharacters
+=== RUN   TestSpecialCharacters/special.key
+=== RUN   TestSpecialCharacters/special.key.with.dots
+=== RUN   TestSpecialCharacters/special/key/with/slashes
+=== RUN   TestSpecialCharacters/special:key:with:colons
+--- PASS: TestSpecialCharacters (0.00s)
+    --- PASS: TestSpecialCharacters/special.key (0.00s)
+    --- PASS: TestSpecialCharacters/special.key.with.dots (0.00s)
+    --- PASS: TestSpecialCharacters/special/key/with/slashes (0.00s)
+    --- PASS: TestSpecialCharacters/special:key:with:colons (0.00s)
+=== RUN   TestByteOperations
+--- PASS: TestByteOperations (0.00s)
+=== RUN   TestByteSliceModification
+--- PASS: TestByteSliceModification (0.00s)
+=== RUN   ExampleDocument_SetAbsoluteCommentAlignment
+--- PASS: ExampleDocument_SetAbsoluteCommentAlignment (0.00s)
+=== RUN   ExampleDocument_EnableRelativeCommentAlignment
+--- PASS: ExampleDocument_EnableRelativeCommentAlignment (0.00s)
+=== RUN   ExampleDocument_DisableCommentAlignment
+--- PASS: ExampleDocument_DisableCommentAlignment (0.00s)
+FAIL
+FAIL	github.com/Winter0rbit/yamler	0.579s
+?   	github.com/Winter0rbit/yamler/internal/testutil	[no test files]
+FAIL
