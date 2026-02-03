@@ -1,10 +1,13 @@
 package yamler
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -192,11 +195,11 @@ func validateNumericEnum(value float64, schema *ValidationRule, path, valueType 
 	for _, enum := range schema.Enum {
 		switch valueType {
 		case "integer":
-			if num, ok := enum.(int64); ok && num == int64(value) {
+			if enumMatchesInt(enum, int64(value)) {
 				return nil
 			}
 		case "float":
-			if num, ok := enum.(float64); ok && num == value {
+			if enumMatchesFloat(enum, value) {
 				return nil
 			}
 		}
@@ -210,13 +213,13 @@ func validateNumericEnum(value float64, schema *ValidationRule, path, valueType 
 
 // validateBool validates a boolean value
 func validateBool(node *yaml.Node, schema *ValidationRule, path string) error {
-	if node.Kind != yaml.ScalarNode || node.Tag != "!!bool" {
+	if node.Kind != yaml.ScalarNode {
 		return fmt.Errorf("path %s: expected boolean, got %s", path, node.Tag)
 	}
 
-	value, err := strconv.ParseBool(node.Value)
-	if err != nil {
-		return fmt.Errorf("path %s: invalid boolean: %v", path, err)
+	value, ok := parseBoolValue(node.Value)
+	if !ok {
+		return fmt.Errorf("path %s: invalid boolean: %s", path, node.Value)
 	}
 
 	if schema.Enum != nil {
@@ -252,7 +255,7 @@ func validateArray(node *yaml.Node, schema *ValidationRule, path string) error {
 	if schema.UniqueItems {
 		seen := make(map[string]bool)
 		for i, item := range node.Content {
-			key := fmt.Sprintf("%v", item.Value)
+			key := uniqueItemKey(item)
 			if seen[key] {
 				return fmt.Errorf("path %s: duplicate item at index %d", path, i)
 			}
@@ -316,4 +319,103 @@ func validateMap(node *yaml.Node, schema *ValidationRule, path string) error {
 	}
 
 	return nil
+}
+
+func parseBoolValue(value string) (bool, bool) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "true", "yes", "on", "1":
+		return true, true
+	case "false", "no", "off", "0":
+		return false, true
+	default:
+		return false, false
+	}
+}
+
+func enumMatchesInt(enum interface{}, value int64) bool {
+	switch v := enum.(type) {
+	case int:
+		return int64(v) == value
+	case int8:
+		return int64(v) == value
+	case int16:
+		return int64(v) == value
+	case int32:
+		return int64(v) == value
+	case int64:
+		return v == value
+	case uint:
+		if v > math.MaxInt64 {
+			return false
+		}
+		return int64(v) == value
+	case uint8:
+		return int64(v) == value
+	case uint16:
+		return int64(v) == value
+	case uint32:
+		return int64(v) == value
+	case uint64:
+		if v > math.MaxInt64 {
+			return false
+		}
+		return int64(v) == value
+	case float32:
+		fv := float64(v)
+		return math.Trunc(fv) == fv && int64(fv) == value
+	case float64:
+		return math.Trunc(v) == v && int64(v) == value
+	default:
+		return false
+	}
+}
+
+func enumMatchesFloat(enum interface{}, value float64) bool {
+	switch v := enum.(type) {
+	case int:
+		return float64(v) == value
+	case int8:
+		return float64(v) == value
+	case int16:
+		return float64(v) == value
+	case int32:
+		return float64(v) == value
+	case int64:
+		return float64(v) == value
+	case uint:
+		return float64(v) == value
+	case uint8:
+		return float64(v) == value
+	case uint16:
+		return float64(v) == value
+	case uint32:
+		return float64(v) == value
+	case uint64:
+		return float64(v) == value
+	case float32:
+		return float64(v) == value
+	case float64:
+		return v == value
+	default:
+		return false
+	}
+}
+
+func uniqueItemKey(node *yaml.Node) string {
+	if node == nil {
+		return "<nil>"
+	}
+	if node.Kind == yaml.ScalarNode {
+		return node.Tag + ":" + node.Value
+	}
+
+	var buf bytes.Buffer
+	encoder := yaml.NewEncoder(&buf)
+	encoder.SetIndent(2)
+	if err := encoder.Encode(node); err == nil {
+		_ = encoder.Close()
+		return buf.String()
+	}
+	_ = encoder.Close()
+	return fmt.Sprintf("%v", node)
 }

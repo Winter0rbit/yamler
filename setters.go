@@ -18,6 +18,24 @@ func (d *Document) Set(path string, value interface{}) error {
 		// Store the current preserveDocumentSeparator setting
 		preserveFlag := d.preserveDocumentSeparator
 
+		if path == "" {
+			valueNode, err := interfaceToNode(value)
+			if err != nil {
+				return err
+			}
+			if d.root == nil || len(d.root.Content) == 0 {
+				return fmt.Errorf("empty document root")
+			}
+			d.root.Content[0] = valueNode
+			content, err := d.ToBytes()
+			if err != nil {
+				return err
+			}
+			d.raw = string(content)
+			d.preserveDocumentSeparator = preserveFlag
+			return nil
+		}
+
 		// For array root documents, prepend [0] to the path if it doesn't start with array index
 		if path != "" && !strings.HasPrefix(path, "[") {
 			path = "[0]." + path

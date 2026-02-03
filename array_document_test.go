@@ -79,6 +79,19 @@ func TestArrayDocumentSupport(t *testing.T) {
 - task3
 `,
 		},
+		{
+			name: "set_array_root_empty_path",
+			input: `---
+- a
+- b`,
+			operation: func(d *Document) error {
+				return d.Set("", []interface{}{"x", "y"})
+			},
+			expectedOutput: `---
+- x
+- y
+`,
+		},
 	}
 
 	for _, tt := range tests {

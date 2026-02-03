@@ -95,6 +95,43 @@ map:
 		}
 	})
 
+	t.Run("Boolean Variants", func(t *testing.T) {
+		yamlContent := `
+flags:
+  yesValue: yes
+  noValue: no
+  onValue: on
+  offValue: off
+  trueValue: true
+  falseValue: false
+`
+		doc, err := Load(yamlContent)
+		if err != nil {
+			t.Fatalf("Failed to load YAML: %v", err)
+		}
+
+		schema := &ValidationRule{
+			Type: TypeMap,
+			Properties: map[string]*ValidationRule{
+				"flags": {
+					Type: TypeMap,
+					Properties: map[string]*ValidationRule{
+						"yesValue":   {Type: TypeBool},
+						"noValue":    {Type: TypeBool},
+						"onValue":    {Type: TypeBool},
+						"offValue":   {Type: TypeBool},
+						"trueValue":  {Type: TypeBool},
+						"falseValue": {Type: TypeBool},
+					},
+				},
+			},
+		}
+
+		if err := doc.Validate(schema); err != nil {
+			t.Errorf("Validation failed for boolean variants: %v", err)
+		}
+	})
+
 	t.Run("Complex Schema", func(t *testing.T) {
 		yamlContent := `
 database:
@@ -216,6 +253,79 @@ settings:
 
 		if err := invalidDoc.Validate(schema); err == nil {
 			t.Error("Expected validation error for invalid document")
+		}
+	})
+
+	t.Run("Unique Items With Maps", func(t *testing.T) {
+		yamlContent := `
+items:
+  - name: alpha
+    count: 1
+  - name: beta
+    count: 2
+`
+		doc, err := Load(yamlContent)
+		if err != nil {
+			t.Fatalf("Failed to load YAML: %v", err)
+		}
+
+		schema := &ValidationRule{
+			Type: TypeMap,
+			Properties: map[string]*ValidationRule{
+				"items": {
+					Type:        TypeArray,
+					UniqueItems: true,
+					Items:       &ValidationRule{Type: TypeMap},
+				},
+			},
+		}
+
+		if err := doc.Validate(schema); err != nil {
+			t.Errorf("Validation failed for unique map items: %v", err)
+		}
+
+		dupContent := `
+items:
+  - name: alpha
+    count: 1
+  - name: alpha
+    count: 1
+`
+		dupDoc, err := Load(dupContent)
+		if err != nil {
+			t.Fatalf("Failed to load YAML: %v", err)
+		}
+		if err := dupDoc.Validate(schema); err == nil {
+			t.Error("Expected validation error for duplicate map items")
+		}
+	})
+
+	t.Run("Numeric Enum Types", func(t *testing.T) {
+		yamlContent := `
+count: 2
+ratio: 1.5
+`
+		doc, err := Load(yamlContent)
+		if err != nil {
+			t.Fatalf("Failed to load YAML: %v", err)
+		}
+
+		schema := &ValidationRule{
+			Type: TypeMap,
+			Properties: map[string]*ValidationRule{
+				"count": {
+					Type: TypeInt,
+					Enum: []interface{}{1, int64(2), float64(3)},
+				},
+				"ratio": {
+					Type: TypeFloat,
+					Enum: []interface{}{1.0, float32(1.5), int(2)},
+				},
+			},
+		}
+
+		if err := doc.Validate(schema); err != nil {
+			t.Errorf("Validation failed for numeric enums: %v", err)
 		}
 	})
 }

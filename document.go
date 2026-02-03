@@ -25,16 +25,34 @@ var stringBuilderPool = sync.Pool{
 }
 
 // Cache for parsed paths to avoid repeated string splitting
-var pathCache = sync.Map{} // string -> []string
+// Bounded to prevent unbounded growth with dynamic paths.
+var pathCache = struct {
+	sync.RWMutex
+	values map[string][]string
+}{
+	values: make(map[string][]string),
+}
+
+const maxPathCacheEntries = 10000
 
 // parsePath splits a path and caches the result
 func parsePath(path string) []string {
-	if cached, ok := pathCache.Load(path); ok {
-		return cached.([]string)
+	pathCache.RLock()
+	if cached, ok := pathCache.values[path]; ok {
+		pathCache.RUnlock()
+		return cached
 	}
+	pathCache.RUnlock()
 
 	parts := strings.Split(path, ".")
-	pathCache.Store(path, parts)
+
+	pathCache.Lock()
+	if len(pathCache.values) >= maxPathCacheEntries {
+		pathCache.values = make(map[string][]string)
+	}
+	pathCache.values[path] = parts
+	pathCache.Unlock()
+
 	return parts
 }
 
