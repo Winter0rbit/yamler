@@ -1,6 +1,7 @@
 package yamler
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -929,6 +930,47 @@ updated: true
 				t.Errorf("String style not preserved.\nGot:\n%s\nWant:\n%s", result, tt.expectedOutput)
 			}
 		})
+	}
+}
+
+func TestFoldedScalarListFormattingPreservedOnUpdate(t *testing.T) {
+	input := `settings:
+  args: >
+    -alpha
+    -beta
+    -gamma`
+
+	doc, err := Load(input)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	value, err := doc.GetString("settings.args")
+	if err != nil {
+		t.Fatalf("GetString() error = %v", err)
+	}
+
+	value = strings.ReplaceAll(value, "beta", "delta")
+	value = value + " -omega"
+
+	if err := doc.Set("settings.args", value); err != nil {
+		t.Fatalf("Set() error = %v", err)
+	}
+
+	result, err := doc.String()
+	if err != nil {
+		t.Fatalf("String() error = %v", err)
+	}
+
+	expected := `settings:
+  args: >
+    -alpha
+    -delta
+    -gamma
+    -omega
+`
+	if result != expected {
+		t.Errorf("Folded scalar formatting not preserved.\nGot:\n%s\nWant:\n%s", result, expected)
 	}
 }
 
