@@ -63,8 +63,9 @@ type Document struct {
 	raw                       string
 	arrayRoot                 bool
 	trailingNewlines          int
-	preserveDocumentSeparator bool // Whether to preserve document separators for array root documents
-	exactTrailingNewlines     bool // Whether to preserve exact trailing newline behavior (from LoadBytes)
+	preserveDocumentSeparator bool   // Whether to preserve document separators for array root documents
+	exactTrailingNewlines     bool   // Whether to preserve exact trailing newline behavior (from LoadBytes)
+	trailingRaw               string // Raw text of an empty trailing document kept by LoadAll (e.g. "---\n")
 	// Performance optimization: cache formatting info
 	formattingCache *FormattingInfo
 }
@@ -132,15 +133,26 @@ func Load(content string) (*Document, error) {
 		}
 	}
 
+	if strings.Contains(content, "---") {
+		n, err := countDocuments(content)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse YAML: %w", err)
+		}
+		if n > 1 {
+			return nil, fmt.Errorf("content contains %d YAML documents; use LoadAll to load a multi-document stream", n)
+		}
+	}
+
 	var node yaml.Node
 	if err := yaml.Unmarshal([]byte(content), &node); err != nil {
 		return nil, fmt.Errorf("failed to parse YAML: %w", err)
 	}
 
 	doc := &Document{
-		root:             &node,
-		raw:              content,
-		trailingNewlines: trailingNewlines,
+		root:                      &node,
+		raw:                       content,
+		trailingNewlines:          trailingNewlines,
+		preserveDocumentSeparator: true,
 	}
 
 	// Initialize formatting cache if we have raw content
@@ -192,9 +204,10 @@ func (d *Document) ToBytes() ([]byte, error) {
 		}
 
 		preserveNodeStylesWithInfo(d.root, info, "")
-		// Apply zero-indent arrays formatting to nodes before encoding
-		applyZeroIndentToNodes(d.root, info, "")
 	}
+
+	// Work around yaml.v3 v3.0.1 emitting "!!merge <<" for merge keys.
+	stripMergeTags(d.root)
 
 	if err := encoder.Encode(d.root); err != nil {
 		return nil, err

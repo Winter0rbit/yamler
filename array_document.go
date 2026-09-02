@@ -30,9 +30,6 @@ func (d *Document) sequenceRoot() (*yaml.Node, error) {
 
 // SetArrayElement sets a value in an array document at the specified index and path
 func (d *Document) SetArrayElement(index int, path string, value interface{}) error {
-	// Do not preserve document separators for array element operations
-	d.preserveDocumentSeparator = false
-
 	if !d.isArrayRoot() {
 		return fmt.Errorf("document root is not an array")
 	}
@@ -92,9 +89,6 @@ func (d *Document) GetArrayDocumentElement(index int, path string) (interface{},
 
 // AddArrayElement adds a new element to an array document
 func (d *Document) AddArrayElement(value interface{}) error {
-	// Do not preserve document separators for array element operations
-	d.preserveDocumentSeparator = false
-
 	if !d.isArrayRoot() {
 		return fmt.Errorf("document root is not an array")
 	}

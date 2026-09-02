@@ -34,7 +34,8 @@ func TestArrayDocumentSupport(t *testing.T) {
 			operation: func(d *Document) error {
 				return d.SetArrayElement(0, "vars.max_clients", 500)
 			},
-			expectedOutput: `- name: Configure web servers
+			expectedOutput: `---
+- name: Configure web servers
   hosts: webservers
   become: yes
   vars:
@@ -61,7 +62,8 @@ func TestArrayDocumentSupport(t *testing.T) {
 			operation: func(d *Document) error {
 				return d.SetArrayElement(1, "", "updated_item2")
 			},
-			expectedOutput: `- item1
+			expectedOutput: `---
+- item1
 - updated_item2
 - item3
 `,
@@ -74,7 +76,8 @@ func TestArrayDocumentSupport(t *testing.T) {
 			operation: func(d *Document) error {
 				return d.AddArrayElement("task3")
 			},
-			expectedOutput: `- task1
+			expectedOutput: `---
+- task1
 - task2
 - task3
 `,

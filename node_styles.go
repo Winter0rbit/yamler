@@ -58,47 +58,17 @@ func preserveNodeStylesWithInfo(node *yaml.Node, info *FormattingInfo, path stri
 	}
 }
 
-// applyZeroIndentToNodes applies zero-indent formatting to nodes before encoding
-func applyZeroIndentToNodes(node *yaml.Node, info *FormattingInfo, path string) {
-	if node == nil || len(info.ZeroIndentArrays) == 0 {
+// stripMergeTags clears the explicit "!!merge" tag that the yaml.v3 decoder
+// attaches to "<<" keys. The v3.0.1 encoder would otherwise render them as
+// "!!merge <<: *anchor" instead of the plain "<<: *anchor" form.
+func stripMergeTags(node *yaml.Node) {
+	if node == nil {
 		return
 	}
-
-	switch node.Kind {
-	case yaml.DocumentNode:
-		// Process document children
-		for _, child := range node.Content {
-			applyZeroIndentToNodes(child, info, path)
-		}
-
-	case yaml.MappingNode:
-		// Process mapping children
-		for i := 0; i < len(node.Content); i += 2 {
-			if i+1 < len(node.Content) {
-				key := node.Content[i].Value
-				newPath := path
-				if newPath == "" {
-					newPath = key
-				} else {
-					newPath = path + "." + key
-				}
-
-				// Check if this key should have zero-indent arrays
-				if info.ZeroIndentArrays[key] && node.Content[i+1].Kind == yaml.SequenceNode {
-					// Mark this sequence for special indentation handling
-					// We'll use a custom tag to identify it during post-processing
-					node.Content[i+1].Tag = "!!seq"
-					node.Content[i+1].Style = 0 // Block style
-				}
-
-				applyZeroIndentToNodes(node.Content[i+1], info, newPath)
-			}
-		}
-
-	case yaml.SequenceNode:
-		// Process sequence children
-		for _, child := range node.Content {
-			applyZeroIndentToNodes(child, info, path)
-		}
+	if node.Kind == yaml.ScalarNode && node.Value == "<<" && node.Tag == "!!merge" {
+		node.Tag = ""
+	}
+	for _, child := range node.Content {
+		stripMergeTags(child)
 	}
 }
