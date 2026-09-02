@@ -4,12 +4,12 @@
 
 ## 🎯 Core Features
 
-### 🎨 Perfect Format Preservation (100% Test Coverage)
+### 🎨 Format Preservation
 
-Yamler's primary strength is maintaining original YAML formatting with perfect fidelity.
+Yamler's primary strength is maintaining the original YAML formatting when a document is modified.
 
 **What's Preserved:**
-- ✅ **Original indentation** (2, 4, 6, 8 spaces, tabs)
+- ✅ **Original indentation** (2, 4, 6, 8 spaces, zero-indent lists)
 - ✅ **Comments and positioning** (inline, block, header comments)
 - ✅ **Array styles** (flow `[1,2,3]`, block, spaced `[ 1 , 2 , 3 ]`)
 - ✅ **Key ordering** (maintains original sequence)
@@ -74,8 +74,8 @@ doc.SetStringSlice("app.servers", []string{"web1", "web2"})
 
 // Individual array elements
 server, err := doc.GetArrayElement("servers", 0)
-port, err := doc.GetIntArrayElement("ports", 0)
-doc.SetIntArrayElement("ports", 0, 8080)
+port, err := doc.GetTypedArrayElement("ports", 0, "int") // "string", "int", "float", "bool"
+doc.Set("ports[0]", 8080)
 ```
 
 #### Map Operations
@@ -96,11 +96,12 @@ Yamler supports multiple boolean formats:
 - `on/off` (configuration style)
 
 ```go
-// All of these work
-doc.Set("ssl", "yes")     // → true
-doc.Set("debug", "on")    // → true
-doc.Set("cache", 1)       // → true
-doc.Set("logging", "off") // → false
+// All of these are read as booleans by GetBool
+// ssl: yes      → true
+// debug: on     → true
+// cache: 1      → true
+// logging: off  → false
+enabled, err := doc.GetBool("ssl")
 ```
 
 ### 🛠️ Advanced Array Operations
@@ -189,8 +190,10 @@ doc.GetAll("**.env[*].name")                // All environment variable names
 doc.GetAll("apps.web.*.config")             // All config under apps.web
 
 // Get matching keys (not values)
-keys := doc.GetKeys("apps.*")               // ["apps.web", "apps.api"]
-envKeys := doc.GetKeys("**.env.*")          // All environment paths
+keys, _ := doc.GetKeys("apps.*")            // ["apps.web", "apps.api"]
+paths, _ := doc.GetPathsRecursive()         // Every leaf path in the document
+
+// SetAll only updates paths that already exist; it never creates keys.
 ```
 
 ### 🧩 Document Merging
@@ -219,9 +222,30 @@ err := doc1.MergeAt("app.settings", settingsDoc)
 #### Merge Behavior
 - **Values**: Override from source document
 - **Arrays**: Complete replacement (not append)
-- **Comments**: Preserved from both documents
+- **Comments**: Target comments are kept for keys that already existed; comments of new keys come from the source
 - **Formatting**: Maintained from base document
-- **New keys**: Added with appropriate formatting
+- **New keys**: Appended to the end of the mapping
+
+### 📑 Multi-Document Streams
+
+`Load` accepts exactly one document and returns an error for a `---`-separated stream. `LoadAll` returns one `Document` per document; each keeps its own formatting and separator:
+
+```go
+docs, _ := yamler.LoadAllFile("manifests.yaml")
+docs[1].Set("spec.replicas", 5)
+yamler.SaveAll("manifests.yaml", docs)
+```
+
+### ✅ Schema Validation
+
+Validation rules are loaded from YAML or JSON with `LoadSchemaFromString` / `LoadSchemaFromFile`. JSON Schema type names (`object`, `integer`, `number`, `boolean`) are accepted alongside `map`, `int`, `float`, `bool`, `string`, `array`, `any`:
+
+```go
+rule, _ := yamler.LoadSchemaFromString(`{"type": "object", "required": ["name"], "properties": {"name": {"type": "string", "minLength": 1}}}`)
+if err := doc.Validate(rule); err != nil {
+    log.Println(err) // path : required field name is missing
+}
+```
 
 ### 💬 Comment Alignment System
 
@@ -321,42 +345,34 @@ All these structures are perfectly preserved during modifications.
 Yamler implements multiple caching layers for optimal performance.
 
 #### Formatting Information Cache
-- **What**: Caches parsed formatting metadata
-- **Benefit**: Avoids re-parsing on repeated operations
-- **Speedup**: 21% faster ToBytes operations
+- **What**: The formatting snapshot (indentation, styles, comment spacing, blank lines) is detected once when a document is loaded and reused by every serialization.
 
 #### Path Parsing Cache
-- **What**: Caches parsed path expressions
-- **Benefit**: Eliminates redundant path parsing
-- **Speedup**: 79% faster repeated path operations
+- **What**: Parsed path expressions are cached in a bounded map (10 000 entries), so repeated access to the same paths does not split strings again.
 
 #### Memory Optimization
-- **Buffer Pooling**: Reuses byte buffers for serialization
-- **Pre-allocation**: Allocates exact memory sizes needed
-- **Benefit**: 5% reduction in memory usage
+- **Buffer Pooling**: Byte buffers used for serialization are pooled with `sync.Pool`.
 
-### Performance Benchmarks
+### Benchmarks
 
-Real-world performance improvements:
-- **ToBytes operations**: 21% faster
-- **Formatting detection**: 48% faster
-- **Path parsing**: 79% faster with caching
-- **Overall improvement**: 14-25% in typical scenarios
+`benchmark_test.go` contains benchmarks for loading, serialization, getters, setters, wildcard and array operations:
 
-### Bulk Operations Optimization
+```bash
+go test -bench . -benchmem
+```
 
-Wildcard operations are highly optimized:
+### Bulk Operations
+
+Every mutation (`Set`, `AppendToArray`, ...) re-serializes the document to keep the formatting snapshot current. `SetAll` applies all matching updates and serializes once, so prefer it over a loop of `Set` calls when many paths change:
 ```go
-// Individual operations (slower)
+// Individual operations: one serialization per call
 for i := 0; i < 100; i++ {
     doc.Set(fmt.Sprintf("services.service%d.debug", i), false)
 }
 
-// Bulk operations (much faster)
+// Bulk operation: one serialization
 doc.SetAll("services.*.debug", false)
 ```
-
-Bulk operations can be 3-10x faster than individual operations.
 
 ## 📊 Array Document Support
 
@@ -387,12 +403,14 @@ Special support for Ansible-style array-root documents.
 doc, err := yamler.LoadFile("playbook.yaml")
 
 // Access array elements
-task, err := doc.GetArrayElement("", 0)  // First task
-taskName, err := doc.GetString("[0].name") // Task name
+taskName, err := doc.GetString("[0].name")            // Task name
+loop, err := doc.GetArrayDocumentElement(0, "loop")   // Same, by element index
+all, err := doc.GetSlice("")                          // The whole list
 
 // Modify array elements
-doc.UpdateArrayElement("", 0, updatedTask)
-doc.AppendToArray("", newTask)
+doc.SetArrayElement(1, "service.state", "restarted")  // element index + path
+doc.Set("apt.name", "nginx")                          // shorthand for element 0
+doc.AddArrayElement(newTask)                          // append a task
 ```
 
 ## 🔧 Error Handling
@@ -427,17 +445,13 @@ if err != nil {
 ```
 
 ### Error Context
-Errors include context about:
-- **Path location**: Which path caused the error
-- **Expected type**: What type was expected
-- **Actual type**: What type was found
-- **Suggestion**: How to fix the issue
+Errors are prefixed with the path that caused them, e.g. `path app.port: invalid integer value: ...` or `path items[abc]: invalid array index: abc`. Errors from `os` and `yaml.v3` are wrapped and can be inspected with `errors.Is` / `errors.As`.
 
 ## 🎨 Real-World Compatibility
 
 ### Supported Formats
 
-**100% Compatible:**
+**Tested with:**
 - ✅ **Application configurations** (JSON-like, nested objects)
 - ✅ **Docker Compose** files (services, networks, volumes)
 - ✅ **Kubernetes** manifests (deployments, services, configmaps)
@@ -457,14 +471,17 @@ Errors include context about:
 | **4-space indentation** | ✅ Perfect | Common in configs |
 | **6-space indentation** | ✅ Perfect | Custom spacing |
 | **8-space indentation** | ✅ Perfect | Large team preference |
-| **Tab indentation** | ✅ Perfect | Legacy configurations |
-| **Mixed indentation** | ✅ Perfect | Real-world scenarios |
+| **Tab indentation** | ❌ Rejected | Forbidden by the YAML specification |
+| **Mixed indentation** | ⚠️ Partial | Keys and items keep their original column; new keys follow their parent |
 | **Flow arrays** | ✅ Perfect | `[1, 2, 3]` style |
 | **Spaced flow arrays** | ✅ Perfect | `[ 1 , 2 , 3 ]` style |
 | **Block arrays** | ✅ Perfect | Multi-line arrays |
 | **Multiline flow** | ✅ Perfect | Complex nested structures |
-| **Comments** | ✅ Perfect | All comment types |
-| **Empty lines** | ✅ Perfect | Spacing preservation |
+| **Comments** | ✅ Preserved | Spacing kept for `key: value  # comment`; comments after bare keys or list items are re-spaced |
+| **Empty lines** | ⚠️ Mostly | Keyed by key name, so same-named keys share a blank-line pattern |
+| **Zero-indent lists** | ✅ Perfect | `containers:\n- name: web` |
+| **Anchors / merge keys** | ✅ Perfect | `&a`, `*a`, `<<: *a` |
+| **Multi-document streams** | ✅ Perfect | via `LoadAll` / `SaveAll` |
 | **String styles** | ✅ Perfect | Plain, quoted, literal, folded |
 
 ## 🚀 Advanced Use Cases
@@ -516,8 +533,7 @@ Errors include context about:
 ## 🔮 Future Roadmap
 
 ### Planned Features
-- **Schema validation** integration
-- **Configuration diffing** and merging tools
+- **Configuration diffing** tools
 - **Template engine** integration
 - **Plugin system** for custom operations
 
@@ -528,8 +544,8 @@ Errors include context about:
 - **Incremental parsing** for partial updates
 
 ### Format Support
+- **Path-keyed formatting hints** (blank lines, flow styles and comment spacing keyed by full path instead of key name)
 - **Custom comment styles** (configurable formatting)
-- **Advanced flow styles** (more complex structures)
 - **YAML 1.2 features** (additional specification support)
 
 ---
