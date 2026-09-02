@@ -140,7 +140,7 @@ func pathMatches(path, pattern string) bool {
 // (used for optimization to avoid exploring irrelevant branches)
 func couldMatch(path, pattern string) bool {
 	// If path is longer than pattern and pattern doesn't have ** or ends with *, probably won't match
-	pathParts := splitPath(path)
+	pathParts := strings.Split(path, ".")
 	patternParts := strings.Split(pattern, ".")
 
 	// Handle ** (recursive wildcard) - always could match

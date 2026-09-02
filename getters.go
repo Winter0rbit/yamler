@@ -10,6 +10,9 @@ import (
 
 // Get returns a value from the YAML document by its path
 func (d *Document) Get(path string) (interface{}, error) {
+	if d.isArrayRoot() {
+		return d.getFromArrayRoot(path)
+	}
 	root, err := d.mappingRoot()
 	if err != nil {
 		return nil, err
@@ -162,22 +165,30 @@ func (d *Document) GetBool(path string) (bool, error) {
 		return false, err
 	}
 
+	if b, ok := toBool(value); ok {
+		return b, nil
+	}
+	return false, fmt.Errorf("path %s: invalid boolean value: %v", path, value)
+}
+
+// toBool converts the loose boolean forms accepted by the library:
+// true/false, yes/no, on/off (case-insensitive strings) and the numbers 1/0.
+func toBool(value interface{}) (bool, bool) {
 	switch v := value.(type) {
 	case bool:
-		return v, nil
-	case string:
-		v = strings.ToLower(v)
-		switch v {
-		case "true", "yes", "1", "on":
-			return true, nil
-		case "false", "no", "0", "off":
-			return false, nil
-		default:
-			return false, fmt.Errorf("path %s: invalid boolean value: %s", path, v)
+		return v, true
+	case int64:
+		if v == 0 || v == 1 {
+			return v == 1, true
 		}
-	default:
-		return false, fmt.Errorf("path %s: expected boolean, got %T", path, value)
+	case int:
+		if v == 0 || v == 1 {
+			return v == 1, true
+		}
+	case string:
+		return parseBoolValue(v)
 	}
+	return false, false
 }
 
 // GetSlice returns a slice value from the YAML document
@@ -292,22 +303,11 @@ func (d *Document) GetBoolSlice(path string) ([]bool, error) {
 
 	result := make([]bool, len(slice))
 	for i, v := range slice {
-		switch val := v.(type) {
-		case bool:
-			result[i] = val
-		case string:
-			val = strings.ToLower(val)
-			switch val {
-			case "true", "yes", "1", "on":
-				result[i] = true
-			case "false", "no", "0", "off":
-				result[i] = false
-			default:
-				return nil, fmt.Errorf("path %s: element %d is not a valid boolean", path, i)
-			}
-		default:
-			return nil, fmt.Errorf("path %s: element %d is not a boolean", path, i)
+		b, ok := toBool(v)
+		if !ok {
+			return nil, fmt.Errorf("path %s: element %d is not a valid boolean", path, i)
 		}
+		result[i] = b
 	}
 
 	return result, nil
@@ -330,4 +330,43 @@ func (d *Document) GetMapSlice(path string) ([]map[string]interface{}, error) {
 	}
 
 	return result, nil
+}
+
+// getFromArrayRoot resolves a path on a document whose root is a sequence.
+// The path must start with an index ("[0].name"); an empty path returns the
+// whole sequence.
+func (d *Document) getFromArrayRoot(path string) (interface{}, error) {
+	root, err := d.sequenceRoot()
+	if err != nil {
+		return nil, err
+	}
+	if path == "" {
+		return nodeToInterface(root)
+	}
+	if !strings.HasPrefix(path, "[") {
+		return nil, fmt.Errorf("path %s: document root is an array, path must start with an index like [0]", path)
+	}
+	end := strings.Index(path, "]")
+	if end < 0 {
+		return nil, fmt.Errorf("path %s: invalid array index format", path)
+	}
+	index, err := strconv.Atoi(path[1:end])
+	if err != nil {
+		return nil, fmt.Errorf("path %s: invalid array index: %s", path, path[1:end])
+	}
+	if index < 0 || index >= len(root.Content) {
+		return nil, fmt.Errorf("path %s: array index out of bounds", path)
+	}
+	node := root.Content[index]
+	rest := strings.TrimPrefix(path[end+1:], ".")
+	if rest == "" {
+		return nodeToInterface(node)
+	}
+	for _, part := range strings.Split(rest, ".") {
+		node, err = navigateToNode(node, part, path)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return nodeToInterface(node)
 }
