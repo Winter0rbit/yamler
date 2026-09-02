@@ -3,77 +3,45 @@
 
 package yamler
 
-import (
-	"strings"
-)
+import "strings"
 
-// alignInlineComments aligns inline comments according to the specified mode
+// alignInlineComments applies the configured comment alignment mode to
+// every line that carries an inline comment.
 func alignInlineComments(content string, info *FormattingInfo) string {
 	lines := strings.Split(content, "\n")
-
+	w := newLineWalker()
 	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-
-		// Skip empty lines and comments-only lines
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+		li := w.next(line)
+		if li.skip {
+			continue
+		}
+		commentPos := inlineCommentIndex(line)
+		if commentPos <= 0 {
+			continue
+		}
+		before := strings.TrimRight(line[:commentPos], " ")
+		comment := line[commentPos:]
+		if strings.TrimSpace(before) == "" {
 			continue
 		}
 
-		// Look for lines with inline comments
-		if commentPos := strings.Index(line, "#"); commentPos >= 0 {
-			// Extract the part before the comment
-			beforeComment := line[:commentPos]
-			comment := line[commentPos:]
-
-			// Check if this line has a key that should be aligned
-			if colonPos := strings.Index(beforeComment, ":"); colonPos >= 0 {
-				key := strings.TrimSpace(beforeComment[:colonPos])
-
-				switch info.AlignmentMode {
-				case CommentAlignmentDisabled:
-					// Remove comments entirely
-					lines[i] = strings.TrimRight(beforeComment, " ")
-
-				case CommentAlignmentRelative:
-					// Relative alignment: preserve original spacing
-					if alignmentValue, exists := info.CommentAlignment[key]; exists && alignmentValue > 0 {
-						// Extract the value part after colon
-						valueStart := colonPos + 1
-						if valueStart < len(beforeComment) {
-							valuePart := beforeComment[valueStart:]
-							trimmedValue := strings.TrimSpace(valuePart)
-
-							// Reconstruct with exact spacing
-							keyPart := beforeComment[:colonPos] // Just up to colon
-							if len(trimmedValue) > 0 {
-								padding := strings.Repeat(" ", alignmentValue)
-								lines[i] = keyPart + ": " + trimmedValue + padding + comment
-							}
-						}
-					}
-
-				case CommentAlignmentAbsolute:
-					// Absolute alignment: align to specific column
-					targetColumn := info.CommentSpacing
-					if targetColumn > 0 {
-						// Remove trailing spaces from before comment
-						beforeComment = strings.TrimRight(beforeComment, " ")
-
-						// Add spaces to reach target column
-						spacesNeeded := targetColumn - len(beforeComment)
-						if spacesNeeded > 0 {
-							padding := strings.Repeat(" ", spacesNeeded)
-							lines[i] = beforeComment + padding + comment
-						} else {
-							// If we can't fit, use at least one space
-							lines[i] = beforeComment + " " + comment
-						}
-					}
+		switch info.AlignmentMode {
+		case CommentAlignmentDisabled:
+			lines[i] = before
+		case CommentAlignmentRelative:
+			if spaces, ok := info.CommentAlignment[li.idxPath]; ok && spaces > 0 {
+				lines[i] = before + strings.Repeat(" ", spaces) + comment
+			}
+		case CommentAlignmentAbsolute:
+			if target := info.CommentSpacing; target > 0 {
+				spaces := target - len(before)
+				if spaces < 1 {
+					spaces = 1
 				}
+				lines[i] = before + strings.Repeat(" ", spaces) + comment
 			}
 		}
 	}
-
 	return strings.Join(lines, "\n")
 }
 

@@ -1,0 +1,46 @@
+version: "3.9"
+
+# Shared logging config
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"   # rotate at 10 MB
+    max-file: "3"
+
+services:
+  web:
+    image: nginx:1.25   # web server
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - NODE_ENV=production
+      - DEBUG=false
+    depends_on: [db, cache]
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 30s
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: app
+      POSTGRES_PASSWORD: secret
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    logging:
+      <<: *default-logging
+      options:
+        max-size: "50m"
+
+  cache:
+    image: redis:7
+    command: ["redis-server", "--appendonly", "yes"]
+
+volumes:
+  db-data: {}
+
+networks:
+  default:
+    name: app-net

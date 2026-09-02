@@ -9,100 +9,49 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// detectFormattingInfoOptimized is an optimized version with fewer allocations
+// detectFormattingInfoOptimized builds the formatting snapshot of a raw YAML
+// text. Every hint is keyed by the path of the line it was found on (see
+// lineWalker), so keys with the same name at different places do not
+// interfere.
 func detectFormattingInfoOptimized(raw string) *FormattingInfo {
 	info := &FormattingInfo{
 		IndentSize:       2,
-		UseTabs:          false,
 		EmptyLines:       make(map[string]int),
 		FlowStyles:       make(map[string]bool),
 		ScalarStyles:     make(map[string]yaml.Style),
 		MultilineFlow:    make(map[string]bool),
 		ZeroIndentArrays: make(map[string]bool),
-		HasDocumentStart: false,
-		HasDocumentEnd:   false,
 		CommentAlignment: make(map[string]int),
-		CommentSpacing:   0,
-		AlignmentMode:    CommentAlignmentRelative, // Default to relative alignment
+		AlignmentMode:    CommentAlignmentRelative,
 		ArrayStyles:      make(map[string]*ArrayStyle),
 		KeyIndents:       make(map[string]int),
 		FlowObjectStyles: make(map[string]string),
+		CommentIndents:   make(map[string]int),
 	}
 
-	// Process lines to detect formatting patterns
 	lines := strings.Split(raw, "\n")
-	emptyLineCount := 0
-
-	for i, line := range lines {
-		if strings.TrimSpace(line) == "" {
-			emptyLineCount++
-		} else {
-			processLineOptimized(line, i, emptyLineCount, info)
-			emptyLineCount = 0
-		}
+	for _, line := range lines {
+		detectLineMarkers(line, info)
 	}
 
-	// Structural lines only (no block scalar contents or comments) decide
-	// the indentation step.
-	indentLevels := detectLineIndents(lines, info, make([]int, 0, 32))
+	indentLevels := detectLineFormatting(lines, info, make([]int, 0, 32))
 
 	// Find the most common indentation increment if not using tabs
 	if !info.UseTabs && len(indentLevels) > 0 {
-		baseIndent := findBaseIndentationOptimized(indentLevels)
-		if baseIndent > 0 {
+		if baseIndent := findBaseIndentationOptimized(indentLevels); baseIndent > 0 {
 			info.IndentSize = baseIndent
 		}
 	}
 
-	// Calculate common comment alignment
 	if len(info.CommentAlignment) > 0 {
 		info.CommentSpacing = findCommonCommentAlignment(info.CommentAlignment)
 	}
 
-	// Detect multiline flow objects after processing all lines
-	detectMultilineFlowObjects(lines, info)
-
 	return info
 }
 
-// detectMultilineFlowObjects finds and stores multiline flow objects like:
-//
-//	resources: {
-//	  cpu: 256,
-//	  memory: 256}
-func detectMultilineFlowObjects(lines []string, info *FormattingInfo) {
-	for i := 0; i < len(lines); i++ {
-		line := lines[i]
-		trimmed := strings.TrimSpace(line)
-
-		// Look for lines that end with { or [
-		if strings.Contains(trimmed, ":") && (strings.HasSuffix(trimmed, "{") || strings.HasSuffix(trimmed, "[")) {
-			colonPos := strings.Index(trimmed, ":")
-			if colonPos > 0 {
-				key := strings.TrimSpace(trimmed[:colonPos])
-				value := strings.TrimSpace(trimmed[colonPos+1:])
-
-				// Check if this starts a multiline flow object
-				if strings.HasSuffix(value, "{") && !strings.Contains(value, "}") {
-					// Found start of multiline flow object, now find the end
-					flowObject := collectMultilineFlowObject(lines, i, '{', '}')
-					if flowObject != "" {
-						info.FlowObjectStyles[key] = flowObject
-					}
-				} else if strings.HasSuffix(value, "[") && !strings.Contains(value, "]") {
-					// Found start of multiline flow array, now find the end
-					flowObject := collectMultilineFlowObject(lines, i, '[', ']')
-					if flowObject != "" {
-						info.FlowObjectStyles[key] = flowObject
-					}
-				}
-			}
-		}
-	}
-}
-
 // collectMultilineFlowObject collects a complete multiline flow object starting from startLine
-func collectMultilineFlowObject(lines []string, startLine int, openBrace, closeBrace rune) string {
+func collectMultilineFlowObject(lines []string, startLine int, firstValue string, openBrace, closeBrace rune) string {
 	var result strings.Builder
 	depth := 0
 
@@ -110,11 +59,9 @@ func collectMultilineFlowObject(lines []string, startLine int, openBrace, closeB
 		line := lines[i]
 
 		if i == startLine {
-			// For the first line, only take the value part after the colon
-			if colonPos := strings.Index(line, ":"); colonPos >= 0 {
-				value := strings.TrimSpace(line[colonPos+1:])
-				result.WriteString(value)
-			}
+			// For the first line, only take the value part after the key
+			result.WriteString(firstValue)
+			line = firstValue
 		} else {
 			// For subsequent lines, take the trimmed content
 			trimmed := strings.TrimSpace(line)
@@ -124,17 +71,15 @@ func collectMultilineFlowObject(lines []string, startLine int, openBrace, closeB
 			}
 		}
 
-		// Count braces AFTER adding the line to result
-		for _, r := range line {
-			if r == openBrace {
-				depth++
-			} else if r == closeBrace {
-				depth--
-				// Check if we've closed all braces after processing this character
-				if depth == 0 {
-					return result.String()
-				}
-			}
+		// Count brackets AFTER adding the line to result, ignoring comments
+		// and quoted strings
+		counted := strings.TrimSpace(line)
+		if strings.HasPrefix(counted, "#") {
+			continue
+		}
+		depth += flowBracketBalance(stripInlineComment(counted))
+		if depth <= 0 {
+			return result.String()
 		}
 	}
 
@@ -142,171 +87,21 @@ func collectMultilineFlowObject(lines []string, startLine int, openBrace, closeB
 	return ""
 }
 
-// processLineOptimized processes a single line efficiently
-func processLineOptimized(line string, lineNum, emptyLinesBefore int, info *FormattingInfo) {
-	if len(line) == 0 {
+// detectLineMarkers records tab usage and document markers.
+func detectLineMarkers(line string, info *FormattingInfo) {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" {
 		return
 	}
-
-	// Count leading whitespace in one pass
-	leadingSpaces := 0
-	leadingTabs := 0
-	contentStart := 0
-
-	for i, r := range line {
-		if r == ' ' {
-			leadingSpaces++
-		} else if r == '\t' {
-			leadingTabs++
-			info.UseTabs = true
-		} else {
-			contentStart = i
-			break
-		}
-	}
-
-	// Skip empty lines
-	if contentStart >= len(line) {
-		return
-	}
-
-	content := line[contentStart:]
-
-	if leadingTabs > 0 {
+	if strings.HasPrefix(line, "\t") {
+		info.UseTabs = true
 		info.IndentSize = 4
 	}
-
-	// Quick checks for common patterns
-	if len(content) >= 3 {
-		if content == "---" {
-			info.HasDocumentStart = true
-			return
-		}
-		if content == "..." {
-			info.HasDocumentEnd = true
-			return
-		}
-	}
-
-	// Handle standalone comments (like "# Application settings")
-	if strings.HasPrefix(content, "#") {
-		// Use the comment text as a key for empty line tracking
-		commentKey := strings.TrimSpace(content)
-		if emptyLinesBefore > 0 {
-			info.EmptyLines[commentKey] = emptyLinesBefore
-		}
-		return
-	}
-
-	// Array elements (lines starting with "- ") are handled by detectLineIndents
-	if strings.HasPrefix(content, "- ") {
-		return
-	}
-
-	// Find colon position efficiently
-	colonPos := -1
-	for i, r := range content {
-		if r == ':' {
-			colonPos = i
-			break
-		}
-	}
-
-	if colonPos <= 0 {
-		return
-	}
-
-	// Extract key efficiently
-	key := strings.TrimSpace(content[:colonPos])
-	if key == "" {
-		return
-	}
-
-	// Store empty lines count
-	if emptyLinesBefore > 0 {
-		info.EmptyLines[key] = emptyLinesBefore
-	}
-
-	// Check for flow styles, scalar styles, and comments in one pass
-	valueStart := colonPos + 1
-	if valueStart < len(content) {
-		value := content[valueStart:]
-
-		// Check for inline comments
-		if commentPos := strings.Index(value, "#"); commentPos >= 0 {
-			// For relative alignment, calculate spacing between value and comment
-			valueBeforeComment := value[:commentPos]
-			// Count trailing spaces in the value part
-			spacesBeforeComment := len(valueBeforeComment) - len(strings.TrimRight(valueBeforeComment, " "))
-			if spacesBeforeComment > 0 {
-				info.CommentAlignment[key] = spacesBeforeComment
-			}
-		}
-
-		// Check for flow styles
-		if strings.ContainsAny(value, "{[") {
-			// Mark as FlowStyles regardless of indentation level to preserve nested flow objects
-			info.FlowStyles[key] = true
-
-			// Store the original flow object string to preserve exact formatting
-			trimmedValue := strings.TrimSpace(value)
-
-			// Check if this is a complete single-line flow object
-			if (strings.Contains(trimmedValue, "{") && strings.Contains(trimmedValue, "}")) ||
-				(strings.Contains(trimmedValue, "[") && strings.Contains(trimmedValue, "]")) {
-				// This is a single-line flow object, save the exact format
-				info.FlowObjectStyles[key] = trimmedValue
-			}
-
-			// Only mark as MultilineFlow if the line actually ends with { or [
-			// AND doesn't contain the closing bracket/brace on the same line
-			if strings.HasSuffix(trimmedValue, "{") && !strings.Contains(trimmedValue, "}") {
-				info.MultilineFlow[key] = true
-			} else if strings.HasSuffix(trimmedValue, "[") && !strings.Contains(trimmedValue, "]") {
-				info.MultilineFlow[key] = true
-			}
-		}
-
-		// Detect array styles
-		if strings.Contains(value, "[") {
-			// This is a flow array, analyze its style
-			arrayStyle := &ArrayStyle{
-				IsFlow:      true,
-				IsMultiline: false,
-				Indentation: leadingSpaces,
-			}
-
-			trimmedValue := strings.TrimSpace(value)
-			if strings.HasPrefix(trimmedValue, "[") && strings.HasSuffix(trimmedValue, "]") {
-				// Single line flow array
-				arrayContent := trimmedValue[1 : len(trimmedValue)-1]
-
-				// Check for spaces around elements
-				if strings.Contains(arrayContent, " , ") ||
-					(strings.HasPrefix(arrayContent, " ") && strings.HasSuffix(arrayContent, " ")) {
-					arrayStyle.HasSpaces = true
-				} else if !strings.Contains(arrayContent, " ") {
-					arrayStyle.IsCompact = true
-				}
-			} else if strings.HasSuffix(trimmedValue, "[") {
-				// Multiline flow array
-				arrayStyle.IsMultiline = true
-				info.MultilineFlow[key] = true
-			}
-
-			info.ArrayStyles[key] = arrayStyle
-		}
-
-		// Check for scalar styles
-		trimmedValue := strings.TrimSpace(value)
-		if len(trimmedValue) > 0 {
-			switch trimmedValue[0] {
-			case '|':
-				info.ScalarStyles[key] = yaml.LiteralStyle
-			case '>':
-				info.ScalarStyles[key] = yaml.FoldedStyle
-			}
-		}
+	switch trimmed {
+	case "---":
+		info.HasDocumentStart = true
+	case "...":
+		info.HasDocumentEnd = true
 	}
 }
 
@@ -363,8 +158,8 @@ func findBaseIndentationOptimized(levels []int) int {
 		}
 	}
 
-	// Ensure result is reasonable (between 1 and 8)
-	if result < 1 {
+	// Ensure result is reasonable (between 2 and 8)
+	if result < 2 {
 		result = 2
 	} else if result > 8 {
 		result = 8
@@ -412,39 +207,127 @@ func detectIndentation(raw string) int {
 	return info.IndentSize
 }
 
-// detectLineIndents records the exact column of every mapping key and of
-// every sequence item, keyed by path (see lineWalker). Items are stored
-// under "<sequence path>[]". Sequences whose items start at the same column
-// as their parent key (kubectl / GitHub Actions style) are additionally
-// recorded in ZeroIndentArrays.
-func detectLineIndents(lines []string, info *FormattingInfo, indentLevels []int) []int {
+// detectLineFormatting walks the document once and records, keyed by path:
+// exact key and item columns (KeyIndents: "a.b" for keys, "a.b[]" for the
+// items of a sequence), zero-indent sequences, blank lines before a line
+// (EmptyLines, keyed with indices, or by comment text for comment lines),
+// inline comment spacing (CommentAlignment, with indices), flow styles,
+// flow object text (FlowObjectStyles), flow array styles (ArrayStyles) and
+// literal/folded scalar styles. It returns the indentation levels of the
+// structural lines for indentation-size detection.
+func detectLineFormatting(lines []string, info *FormattingInfo, indentLevels []int) []int {
 	w := newLineWalker()
 	var lastKey *lineInfo
-	for _, line := range lines {
+	emptyBefore := 0
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			emptyBefore++
+			continue
+		}
 		li := w.next(line)
 		if li.skip {
+			if strings.HasPrefix(trimmed, "#") {
+				if emptyBefore > 0 {
+					info.EmptyLines[trimmed] = emptyBefore
+				}
+				if prev, seen := info.CommentIndents[trimmed]; seen && prev != li.indent {
+					info.CommentIndents[trimmed] = -1
+				} else if !seen {
+					info.CommentIndents[trimmed] = li.indent
+				}
+			}
+			emptyBefore = 0
 			continue
 		}
 		if li.indent > 0 && !strings.HasPrefix(line, "\t") {
 			indentLevels = append(indentLevels, li.indent)
 		}
+		if emptyBefore > 0 && (li.key != "" || li.isItem) {
+			info.EmptyLines[li.idxPath] = emptyBefore
+		}
+		emptyBefore = 0
+
+		// Paths ignore indices, so all items of a sequence share a record;
+		// the first occurrence wins when items are laid out differently.
 		if li.isItem {
-			info.KeyIndents[li.path+"[]"] = li.indent
-			if lastKey != nil && lastKey.keyPath == li.path && lastKey.indent == li.indent {
+			if _, seen := info.KeyIndents[li.path+"[]"]; !seen {
+				info.KeyIndents[li.path+"[]"] = li.indent
+			}
+			if lastKey != nil && lastKey.keyPath == li.path && keyColumn(*lastKey) == li.indent {
 				info.ZeroIndentArrays[li.path] = true
 			}
 		}
-		if li.key != "" {
-			keyIndent := li.indent
-			if li.isItem {
-				keyIndent += 2
+
+		if c := inlineCommentIndex(line); c > 0 {
+			before := line[:c]
+			if spaces := len(before) - len(strings.TrimRight(before, " ")); spaces > 0 && strings.TrimSpace(before) != "" {
+				info.CommentAlignment[li.idxPath] = spaces
 			}
-			info.KeyIndents[li.keyPath] = keyIndent
-			cp := li
-			lastKey = &cp
-		} else {
+		}
+
+		if li.key == "" {
 			lastKey = nil
+			continue
+		}
+		if _, seen := info.KeyIndents[li.keyPath]; !seen {
+			info.KeyIndents[li.keyPath] = li.keyCol
+		}
+		cp := li
+		lastKey = &cp
+
+		value := stripInlineComment(li.value)
+		if value == "" {
+			continue
+		}
+		switch value[0] {
+		case '|':
+			info.ScalarStyles[li.keyPath] = yaml.LiteralStyle
+		case '>':
+			info.ScalarStyles[li.keyPath] = yaml.FoldedStyle
+		case '{', '[':
+			if inlineCommentIndex(li.value) < 0 {
+				// Flow values with comments inside are left to the encoder.
+				detectFlowValue(lines, i, value, li.keyPath, info)
+			}
 		}
 	}
 	return indentLevels
+}
+
+// detectFlowValue records the style of a flow mapping or sequence value.
+func detectFlowValue(lines []string, i int, value, keyPath string, info *FormattingInfo) {
+	info.FlowStyles[keyPath] = true
+	open, closing := value[0], byte('}')
+	if open == '[' {
+		closing = ']'
+	}
+	if strings.IndexByte(value, closing) >= 0 {
+		// Complete single-line flow value.
+		info.FlowObjectStyles[keyPath] = value
+	} else {
+		obj := collectMultilineFlowObject(lines, i, value, rune(open), rune(closing))
+		if obj == "" || strings.Contains(obj, "#") {
+			// Unterminated, or with comments inside: left to the encoder.
+			delete(info.FlowStyles, keyPath)
+			return
+		}
+		info.MultilineFlow[keyPath] = true
+		info.FlowObjectStyles[keyPath] = obj
+	}
+	if open != '[' {
+		return
+	}
+	style := &ArrayStyle{IsFlow: true}
+	if strings.HasSuffix(value, "]") {
+		inner := value[1 : len(value)-1]
+		if strings.Contains(inner, " , ") || (strings.HasPrefix(inner, " ") && strings.HasSuffix(inner, " ")) {
+			style.HasSpaces = true
+		} else if !strings.Contains(inner, " ") {
+			style.IsCompact = true
+		}
+	} else {
+		style.IsMultiline = true
+	}
+	info.ArrayStyles[keyPath] = style
 }

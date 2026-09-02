@@ -44,4 +44,5 @@ type FormattingInfo struct {
 	ArrayStyles      map[string]*ArrayStyle // Array formatting styles
 	KeyIndents       map[string]int         // Exact indentation for each key
 	FlowObjectStyles map[string]string      // Original flow object strings to preserve exact formatting
+	CommentIndents   map[string]int         // Indentation of standalone comment lines by text (-1 if ambiguous)
 }

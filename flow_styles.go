@@ -95,188 +95,133 @@ func isInsideInlineObject(lines []string, lineIndex int) bool {
 	return false
 }
 
-// applyArrayStyles applies array formatting styles to the content
+// keyValueStart returns the index in line just after the ":" of its key.
+func keyValueStart(line string, li lineInfo) int {
+	trimmed := strings.TrimLeft(line, " ")
+	offset := len(line) - len(trimmed)
+	if li.isItem {
+		trimmed = strings.TrimLeft(trimmed[1:], " ")
+		offset = len(line) - len(trimmed)
+	}
+	// Skip a quoted key.
+	i := 0
+	if trimmed != "" && (trimmed[0] == '"' || trimmed[0] == '\'') {
+		q := trimmed[0]
+		for i = 1; i < len(trimmed) && trimmed[i] != q; i++ {
+		}
+	}
+	for ; i < len(trimmed); i++ {
+		if trimmed[i] == ':' && (i+1 == len(trimmed) || trimmed[i+1] == ' ' || trimmed[i+1] == '\t') {
+			return offset + i + 1
+		}
+	}
+	return -1
+}
+
+// applyArrayStyles restores the original style of flow arrays that the
+// encoder has rewritten on a single line with default spacing.
 func applyArrayStyles(content string, info *FormattingInfo) string {
 	if len(info.ArrayStyles) == 0 {
 		return content
 	}
 
 	lines := strings.Split(content, "\n")
-
+	w := newLineWalker()
 	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.Contains(trimmed, ":") {
-			if idx := strings.Index(trimmed, ":"); idx > 0 {
-				key := strings.TrimSpace(trimmed[:idx])
-
-				// Check if this key has a specific array style
-				// But skip keys that are inside inline objects
-				if style, exists := info.ArrayStyles[key]; exists && style.IsFlow && !isInsideInlineObject(lines, i) {
-					value := line[idx+1:]
-
-					// Check if we have original multiline flow format stored
-					if originalFlow, exists := info.FlowObjectStyles[key]; exists && style.IsMultiline && strings.Contains(originalFlow, "\n") {
-						// This is a multiline flow array that was collapsed to single line
-						// But we need to check if the current content has changed and update accordingly
-						currentArrayContent := extractCurrentArrayElements(value)
-						originalArrayContent := extractCurrentArrayElements(originalFlow)
-
-						if !equalStringSlices(currentArrayContent, originalArrayContent) {
-							// Content has changed, update the multiline format with new elements
-							updatedFlow := updateMultilineFlowArrayWithElements(originalFlow, currentArrayContent)
-							lines[i] = line[:idx+1] + " " + updatedFlow
-						} else {
-							// Content is the same, restore original format
-							lines[i] = line[:idx+1] + " " + originalFlow
-						}
-					} else if strings.Contains(value, "[") && strings.Contains(value, "]") {
-						// Extract the array content for non-multiline arrays
-						start := strings.Index(value, "[")
-						end := strings.LastIndex(value, "]")
-						if start >= 0 && end > start {
-							arrayContent := value[start+1 : end]
-
-							// Apply the specific style
-							var newArrayContent string
-							if style.IsMultiline && !strings.Contains(arrayContent, "\n") {
-								// Convert single-line to multiline
-								elements := strings.Split(arrayContent, ",")
-								for j, elem := range elements {
-									elements[j] = strings.TrimSpace(elem)
-								}
-								// Create multiline format
-								indent := "  " // 2-space indent for array elements
-								newArrayContent = "\n" + indent + strings.Join(elements, ",\n"+indent) + "\n"
-							} else if style.HasSpaces {
-								// Add spaces around elements: [1,2,3] -> [ 1 , 2 , 3 ]
-								elements := strings.Split(arrayContent, ",")
-								for j, elem := range elements {
-									elements[j] = " " + strings.TrimSpace(elem) + " "
-								}
-								newArrayContent = strings.Join(elements, ",")
-							} else if style.IsCompact {
-								// Remove all spaces: [ 1 , 2 , 3 ] -> [1,2,3]
-								elements := strings.Split(arrayContent, ",")
-								for j, elem := range elements {
-									elements[j] = strings.TrimSpace(elem)
-								}
-								newArrayContent = strings.Join(elements, ",")
-							} else {
-								// Default formatting
-								elements := strings.Split(arrayContent, ",")
-								for j, elem := range elements {
-									elements[j] = strings.TrimSpace(elem)
-								}
-								newArrayContent = strings.Join(elements, ", ")
-							}
-
-							// Rebuild the line
-							newValue := value[:start+1] + newArrayContent + value[end:]
-							lines[i] = line[:idx+1] + newValue
-						}
-					}
-				}
-			}
+		li := w.next(line)
+		if li.skip || li.key == "" {
+			continue
 		}
+		style, ok := info.ArrayStyles[li.keyPath]
+		if !ok || !style.IsFlow {
+			continue
+		}
+		vs := keyValueStart(line, li)
+		if vs < 0 {
+			continue
+		}
+		value := line[vs:]
+		start := strings.Index(value, "[")
+		end := strings.LastIndex(value, "]")
+		if start < 0 || end <= start {
+			continue
+		}
+
+		if originalFlow, ok := info.FlowObjectStyles[li.keyPath]; ok && style.IsMultiline && strings.Contains(originalFlow, "\n") {
+			// Multi-line flow array collapsed by the encoder: restore the
+			// original layout, updating elements if they changed.
+			current := extractCurrentArrayElements(value)
+			original := extractCurrentArrayElements(originalFlow)
+			if !equalStringSlices(current, original) {
+				lines[i] = line[:vs] + " " + updateMultilineFlowArrayWithElements(originalFlow, current)
+			} else {
+				lines[i] = line[:vs] + " " + originalFlow
+			}
+			continue
+		}
+
+		elements := strings.Split(value[start+1:end], ",")
+		for j, elem := range elements {
+			elements[j] = strings.TrimSpace(elem)
+		}
+		var inner string
+		switch {
+		case style.HasSpaces:
+			for j := range elements {
+				elements[j] = " " + elements[j] + " "
+			}
+			inner = strings.Join(elements, ",")
+		case style.IsCompact:
+			inner = strings.Join(elements, ",")
+		default:
+			inner = strings.Join(elements, ", ")
+		}
+		if len(elements) == 1 && elements[0] == "" {
+			inner = ""
+		}
+		lines[i] = line[:vs] + value[:start+1] + inner + value[end:]
 	}
 
 	return strings.Join(lines, "\n")
 }
 
-// applyFlowObjectStyles applies original flow object formatting to preserve exact spacing
+// applyFlowObjectStyles restores the original text of flow mappings
+// ({key: value}), including multi-line ones, updating values that changed.
 func applyFlowObjectStyles(content string, info *FormattingInfo) string {
 	if len(info.FlowObjectStyles) == 0 {
 		return content
 	}
 
 	lines := strings.Split(content, "\n")
-	// Track document structure to build full paths for keys
-	pathStack := make([]string, 0)
-	indentStack := make([]int, 0)
-
+	w := newLineWalker()
 	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.Contains(trimmed, ":") {
-			if idx := strings.Index(trimmed, ":"); idx > 0 {
-				key := strings.TrimSpace(trimmed[:idx])
-				currentIndent := getLineIndentation(line)
-
-				// Update path stack based on indentation
-				for len(indentStack) > 0 && indentStack[len(indentStack)-1] >= currentIndent {
-					pathStack = pathStack[:len(pathStack)-1]
-					indentStack = indentStack[:len(indentStack)-1]
-				}
-
-				// Build full path
-				var fullPath string
-				if len(pathStack) > 0 {
-					fullPath = strings.Join(pathStack, ".") + "." + key
-				} else {
-					fullPath = key
-				}
-
-				// Check both the simple key and the full path for flow object styles
-				var originalStyle string
-				var exists bool
-				if originalStyle, exists = info.FlowObjectStyles[key]; !exists {
-					// If simple key doesn't exist, try the full path
-					originalStyle, exists = info.FlowObjectStyles[fullPath]
-				}
-
-				if exists {
-					// Extract current value part after the colon
-					valueStart := strings.Index(line, ":") + 1
-					if valueStart < len(line) {
-						currentValue := strings.TrimSpace(line[valueStart:])
-
-						// Only process if this is a flow object starting with {
-						if strings.HasPrefix(currentValue, "{") {
-							// Check if the current value is a single-line collapsed version
-							// like "{cpu: 512, memory: 512}" vs original multiline format
-							if !strings.Contains(currentValue, "\n") && strings.Contains(originalStyle, "\n") {
-								// This is a collapsed flow object, we need to extract new values
-								// and apply them to the original multiline format
-								newValues := extractFlowObjectValues(currentValue)
-								if len(newValues) > 0 {
-									// Update the original style with new values
-									updatedStyle := updateFlowObjectWithNewValues(originalStyle, newValues)
-
-									// Replace the value part with updated multiline style
-									newLine := line[:valueStart] + " " + updatedStyle
-									lines[i] = newLine
-								}
-							} else if !strings.Contains(currentValue, "\n") && !strings.Contains(originalStyle, "\n") {
-								// Both are single-line - apply original formatting with updated values
-								currentValues := extractFlowObjectValues(currentValue)
-								originalValues := extractFlowObjectValues(originalStyle)
-
-								// Check if values changed
-								valuesChanged := false
-								for k, newVal := range currentValues {
-									if origVal, ok := originalValues[k]; !ok || origVal != newVal {
-										valuesChanged = true
-										break
-									}
-								}
-
-								// Always apply original formatting to preserve spaces, even if values didn't change
-								// This handles cases where YAML encoder strips spaces but we want to preserve them
-								if valuesChanged || currentValue != originalStyle {
-									updatedStyle := updateFlowObjectWithNewValues(originalStyle, currentValues)
-									newLine := line[:valueStart] + " " + updatedStyle
-									lines[i] = newLine
-								}
-							}
-						}
-					}
-				}
-
-				// Add current key to path stack for nested elements
-				if strings.Contains(line, ":") && !strings.HasSuffix(strings.TrimSpace(line), "}") {
-					pathStack = append(pathStack, key)
-					indentStack = append(indentStack, currentIndent)
-				}
+		li := w.next(line)
+		if li.skip || li.key == "" {
+			continue
+		}
+		originalStyle, ok := info.FlowObjectStyles[li.keyPath]
+		if !ok || !strings.HasPrefix(originalStyle, "{") {
+			continue
+		}
+		vs := keyValueStart(line, li)
+		if vs < 0 {
+			continue
+		}
+		currentValue := strings.TrimSpace(line[vs:])
+		if !strings.HasPrefix(currentValue, "{") {
+			continue
+		}
+		currentValues := extractFlowObjectValues(currentValue)
+		if strings.Contains(originalStyle, "\n") {
+			// Collapsed multi-line flow object: put the new values into the
+			// original layout.
+			if len(currentValues) > 0 {
+				lines[i] = line[:vs] + " " + updateFlowObjectWithNewValues(originalStyle, currentValues)
 			}
+			continue
+		}
+		if currentValue != originalStyle {
+			lines[i] = line[:vs] + " " + updateFlowObjectWithNewValues(originalStyle, currentValues)
 		}
 	}
 

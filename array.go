@@ -505,154 +505,51 @@ func getArrayNode(root *yaml.Node, path string) (*yaml.Node, error) {
 	return current, nil
 }
 
-// getArrayStyle detects the current style of an array
+// getArrayStyle returns the recorded style of the array at path, or the
+// default block style.
 func (d *Document) getArrayStyle(path string) (*ArrayStyle, error) {
-	// Check if we have cached style information
 	if d.formattingCache != nil && d.formattingCache.ArrayStyles != nil {
-		if style, exists := d.formattingCache.ArrayStyles[path]; exists {
+		if style, exists := d.formattingCache.ArrayStyles[stripIndices(path)]; exists {
 			return style, nil
 		}
 	}
-
-	// Fallback: analyze the current array in raw content
-	if d.raw != "" {
-		lines := strings.Split(d.raw, "\n")
-		for i, line := range lines {
-			trimmed := strings.TrimSpace(line)
-			if strings.Contains(trimmed, ":") {
-				if idx := strings.Index(trimmed, ":"); idx > 0 {
-					key := strings.TrimSpace(trimmed[:idx])
-					if key == path {
-						value := line[idx+1:]
-
-						style := &ArrayStyle{
-							Indentation: getLineIndentation(line),
-						}
-
-						if strings.Contains(value, "[") {
-							style.IsFlow = true
-							trimmedValue := strings.TrimSpace(value)
-
-							if strings.HasPrefix(trimmedValue, "[") && strings.HasSuffix(trimmedValue, "]") {
-								// Single line flow array
-								arrayContent := trimmedValue[1 : len(trimmedValue)-1]
-
-								// Check for spaces around elements
-								if strings.Contains(arrayContent, " , ") ||
-									(strings.HasPrefix(arrayContent, " ") && strings.HasSuffix(arrayContent, " ")) {
-									style.HasSpaces = true
-								} else if !strings.Contains(arrayContent, " ") {
-									style.IsCompact = true
-								}
-							} else if strings.HasSuffix(trimmedValue, "[") {
-								// Multiline flow array - check following lines
-								style.IsMultiline = true
-
-								// Look for closing bracket to determine if it's really multiline
-								for j := i + 1; j < len(lines); j++ {
-									nextLine := lines[j]
-									if strings.Contains(nextLine, "]") {
-										break
-									}
-								}
-							}
-						} else {
-							// Block style array
-							style.IsFlow = false
-						}
-
-						return style, nil
-					}
-				}
-			}
-		}
-	}
-
-	// Default style
-	return &ArrayStyle{
-		IsFlow:      false,
-		Indentation: 2,
-	}, nil
+	return &ArrayStyle{IsFlow: false, Indentation: 2}, nil
 }
 
-// applyArrayStyle applies the given style to an array in the content
+// stripIndices replaces array indices in a user path with "[]"
+// ("a.b[0].c" -> "a.b[].c") so that it matches the paths used by the
+// formatting snapshot.
+func stripIndices(path string) string {
+	if !strings.Contains(path, "[") {
+		return path
+	}
+	var b strings.Builder
+	skip := false
+	for i := 0; i < len(path); i++ {
+		switch {
+		case path[i] == '[':
+			skip = true
+			b.WriteString("[]")
+		case path[i] == ']':
+			skip = false
+		case !skip:
+			b.WriteByte(path[i])
+		}
+	}
+	return b.String()
+}
+
+// applyArrayStyle records the style to use for the array at path.
 func (d *Document) applyArrayStyle(path string, style *ArrayStyle) error {
 	if style == nil {
 		return nil
 	}
-
-	// Update the cached style
 	if d.formattingCache == nil {
 		d.formattingCache = detectFormattingInfoOptimized(d.raw)
 	}
 	if d.formattingCache.ArrayStyles == nil {
 		d.formattingCache.ArrayStyles = make(map[string]*ArrayStyle)
 	}
-	d.formattingCache.ArrayStyles[path] = style
-
-	// If this is a multiline flow array, store the original format for later restoration
-	if style.IsFlow && style.IsMultiline {
-		if d.formattingCache.FlowObjectStyles == nil {
-			d.formattingCache.FlowObjectStyles = make(map[string]string)
-		}
-
-		// Try to find the original multiline format in the raw content
-		if originalFormat := d.findOriginalArrayFormat(path); originalFormat != "" {
-			d.formattingCache.FlowObjectStyles[path] = originalFormat
-		}
-	}
-
-	// Force re-application of formatting
-	content, err := d.ToBytes()
-	if err != nil {
-		return err
-	}
-	d.raw = string(content)
-
+	d.formattingCache.ArrayStyles[stripIndices(path)] = style
 	return nil
-}
-
-// findOriginalArrayFormat finds the original multiline array format in raw content
-func (d *Document) findOriginalArrayFormat(path string) string {
-	if d.raw == "" {
-		return ""
-	}
-
-	lines := strings.Split(d.raw, "\n")
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.Contains(trimmed, ":") {
-			if idx := strings.Index(trimmed, ":"); idx > 0 {
-				key := strings.TrimSpace(trimmed[:idx])
-				if key == path {
-					value := strings.TrimSpace(line[idx+1:])
-
-					// Check if this is the start of a multiline flow array
-					if strings.HasSuffix(value, "[") || (strings.Contains(value, "[") && !strings.Contains(value, "]")) {
-						// Collect the multiline array
-						var result strings.Builder
-
-						// Start from the opening bracket
-						if strings.Contains(value, "[") {
-							startIdx := strings.Index(value, "[")
-							result.WriteString(value[startIdx:])
-						}
-
-						// Continue collecting until we find the closing bracket
-						bracketCount := strings.Count(result.String(), "[") - strings.Count(result.String(), "]")
-
-						for j := i + 1; j < len(lines) && bracketCount > 0; j++ {
-							result.WriteString("\n")
-							result.WriteString(lines[j])
-							bracketCount += strings.Count(lines[j], "[") - strings.Count(lines[j], "]")
-						}
-
-						return result.String()
-					}
-				}
-			}
-		}
-	}
-
-	return ""
 }

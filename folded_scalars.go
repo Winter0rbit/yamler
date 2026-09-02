@@ -17,142 +17,153 @@ type foldedScalarInfo struct {
 	listItems     bool
 }
 
-// preserveFoldedScalars preserves original formatting of folded scalars
+// preserveFoldedScalars restores the original line layout of folded (>)
+// scalars, which the encoder re-folds onto a single line.
 func preserveFoldedScalars(newContent, original string, info *FormattingInfo) string {
-	// Find folded scalars in original content and preserve their formatting
+	if len(info.ScalarStyles) == 0 {
+		return newContent
+	}
 	originalLines := strings.Split(original, "\n")
-
 	foldedInfo := make(map[string]foldedScalarInfo)
 
-	// Extract original folded scalar formatting info
+	w := newLineWalker()
 	for i, line := range originalLines {
-		trimmed := strings.TrimSpace(line)
-		if strings.Contains(trimmed, ">") && strings.Contains(trimmed, ":") {
-			if idx := strings.Index(trimmed, ":"); idx > 0 {
-				key := strings.TrimSpace(trimmed[:idx])
-				if info.ScalarStyles[key] == yaml.FoldedStyle {
-					indent := getLineIndentation(line)
-					contentIndent := ""
-					listItems := true
-					foundContent := false
-
-					var foldedLines []string
-					for j := i + 1; j < len(originalLines); j++ {
-						nextLine := originalLines[j]
-						if strings.TrimSpace(nextLine) == "" {
-							foldedLines = append(foldedLines, "")
-							continue
-						}
-
-						nextIndent := getLineIndentation(nextLine)
-						if nextIndent > indent {
-							foldedLines = append(foldedLines, nextLine)
-							if !foundContent {
-								contentIndent = leadingWhitespace(nextLine)
-								foundContent = true
-							}
-							if !strings.HasPrefix(strings.TrimSpace(nextLine), "-") {
-								listItems = false
-							}
-						} else {
-							break
-						}
-					}
-
-					if !foundContent {
-						contentIndent = strings.Repeat(" ", indent+info.IndentSize)
-						listItems = false
-					}
-
-					indicator := extractFoldedIndicator(line)
-					foldedInfo[key] = foldedScalarInfo{
-						key:           key,
-						keyIndent:     indent,
-						contentIndent: contentIndent,
-						indicator:     indicator,
-						originalLines: foldedLines,
-						listItems:     listItems,
-					}
-				}
-			}
+		li := w.next(line)
+		if li.skip || li.key == "" || info.ScalarStyles[li.keyPath] != yaml.FoldedStyle {
+			continue
 		}
-	}
-
-	// Replace folded scalars in new content with preserved formatting
-	for key, originalInfo := range foldedInfo {
-		newContent = replaceFoldedScalar(newContent, key, originalInfo)
-	}
-
-	return newContent
-}
-
-// replaceFoldedScalar replaces folded scalar content in new YAML with original formatting
-func replaceFoldedScalar(content, key string, info foldedScalarInfo) string {
-	lines := strings.Split(content, "\n")
-
-	// Find the key line in new content
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, key+":") {
-			colonPos := strings.Index(line, ":")
-			if colonPos < 0 {
+		if !strings.HasPrefix(stripInlineComment(li.value), ">") {
+			continue
+		}
+		indent := keyColumn(li)
+		contentIndent := ""
+		listItems := true
+		foundContent := false
+		var foldedLines []string
+		for j := i + 1; j < len(originalLines); j++ {
+			nextLine := originalLines[j]
+			if strings.TrimSpace(nextLine) == "" {
+				foldedLines = append(foldedLines, "")
 				continue
 			}
-
-			indent := getLineIndentation(line)
-			lineIndent := leadingWhitespace(line)
-			valuePart := strings.TrimSpace(line[colonPos+1:])
-			valuePart = stripInlineComment(valuePart)
-			hasFoldedIndicator := strings.HasPrefix(valuePart, ">")
-
-			// Remove old folded content
-			endIdx := i + 1
-			var newValueLines []string
-			if hasFoldedIndicator {
-				for j := i + 1; j < len(lines); j++ {
-					if strings.TrimSpace(lines[j]) == "" {
-						newValueLines = append(newValueLines, "")
-						endIdx = j + 1
-						continue
-					}
-					lineIndent := getLineIndentation(lines[j])
-					if lineIndent > indent {
-						newValueLines = append(newValueLines, lines[j])
-						endIdx = j + 1
-					} else {
-						break
-					}
-				}
-			} else if valuePart != "" {
-				newValueLines = append(newValueLines, valuePart)
+			if getLineIndentation(nextLine) <= indent {
+				break
 			}
-
-			originalValue := foldScalarValueFromLines(info.originalLines)
-			newValue := foldScalarValueFromLines(newValueLines)
-			replacementLines := formatFoldedScalarLines(newValueLines, info)
-			if len(info.originalLines) > 0 {
-				if originalValue == newValue || normalizeFoldedScalarValue(originalValue) == normalizeFoldedScalarValue(newValue) {
-					replacementLines = info.originalLines
-				}
+			foldedLines = append(foldedLines, nextLine)
+			if !foundContent {
+				contentIndent = leadingWhitespace(nextLine)
+				foundContent = true
 			}
-
-			indicator := info.indicator
-			if indicator == "" {
-				indicator = ">"
+			if !strings.HasPrefix(strings.TrimSpace(nextLine), "-") {
+				listItems = false
 			}
-			lines[i] = lineIndent + key + ": " + indicator
-
-			// Insert replacement content
-			newLines := make([]string, 0, len(lines)-endIdx+i+1+len(replacementLines))
-			newLines = append(newLines, lines[:i+1]...)
-			newLines = append(newLines, replacementLines...)
-			newLines = append(newLines, lines[endIdx:]...)
-
-			return strings.Join(newLines, "\n")
+		}
+		for len(foldedLines) > 0 && foldedLines[len(foldedLines)-1] == "" {
+			foldedLines = foldedLines[:len(foldedLines)-1]
+		}
+		if !foundContent {
+			contentIndent = strings.Repeat(" ", indent+info.IndentSize)
+			listItems = false
+		}
+		foldedInfo[li.keyPath] = foldedScalarInfo{
+			key:           li.key,
+			keyIndent:     indent,
+			contentIndent: contentIndent,
+			indicator:     extractFoldedIndicator(li.value),
+			originalLines: foldedLines,
+			listItems:     listItems,
 		}
 	}
+	if len(foldedInfo) == 0 {
+		return newContent
+	}
 
-	return content
+	return replaceFoldedScalars(newContent, foldedInfo)
+}
+
+// replaceFoldedScalars rewrites every folded scalar in content whose path
+// is in foldedInfo using the original layout.
+func replaceFoldedScalars(content string, foldedInfo map[string]foldedScalarInfo) string {
+	lines := strings.Split(content, "\n")
+	var out []string
+	w := newLineWalker()
+	for i := 0; i < len(lines); i++ {
+		line := lines[i]
+		li := w.next(line)
+		if li.skip || li.key == "" {
+			out = append(out, line)
+			continue
+		}
+		info, ok := foldedInfo[li.keyPath]
+		if !ok {
+			out = append(out, line)
+			continue
+		}
+		vs := keyValueStart(line, li)
+		if vs < 0 {
+			out = append(out, line)
+			continue
+		}
+		indent := keyColumn(li)
+		valuePart := stripInlineComment(strings.TrimSpace(line[vs:]))
+		hasFoldedIndicator := strings.HasPrefix(valuePart, ">")
+
+		// Collect the value the encoder produced.
+		var newValueLines []string
+		end := i
+		if hasFoldedIndicator {
+			for j := i + 1; j < len(lines); j++ {
+				if strings.TrimSpace(lines[j]) == "" {
+					newValueLines = append(newValueLines, "")
+					end = j
+					continue
+				}
+				if getLineIndentation(lines[j]) <= indent {
+					break
+				}
+				newValueLines = append(newValueLines, lines[j])
+				end = j
+			}
+			// The encoder may leave blank lines after the block; drop them
+			// from the value but keep them consumed.
+			for len(newValueLines) > 0 && newValueLines[len(newValueLines)-1] == "" {
+				newValueLines = newValueLines[:len(newValueLines)-1]
+			}
+			// Feed the skipped block to the walker so its state stays in sync.
+			for j := i + 1; j <= end; j++ {
+				w.next(lines[j])
+			}
+		} else if valuePart != "" && valuePart != `""` && valuePart != "''" {
+			if valuePart[0] == '"' || valuePart[0] == '\'' {
+				// The encoder chose a quoted string (e.g. trailing spaces
+				// that cannot be folded). Only restore the original block
+				// if it denotes exactly the same value.
+				var decoded string
+				if err := yaml.Unmarshal([]byte(valuePart), &decoded); err != nil || decoded != foldedBlockValue(info) {
+					out = append(out, line)
+					continue
+				}
+				out = append(out, line[:vs]+" "+foldedIndicatorOrDefault(info))
+				out = append(out, info.originalLines...)
+				continue
+			} else {
+				newValueLines = append(newValueLines, valuePart)
+			}
+		}
+
+		replacement := formatFoldedScalarLines(newValueLines, info)
+		if len(info.originalLines) > 0 {
+			originalValue := foldScalarValueFromLines(info.originalLines)
+			newValue := foldScalarValueFromLines(newValueLines)
+			if originalValue == newValue || normalizeFoldedScalarValue(originalValue) == normalizeFoldedScalarValue(newValue) {
+				replacement = info.originalLines
+			}
+		}
+		out = append(out, line[:vs]+" "+foldedIndicatorOrDefault(info))
+		out = append(out, replacement...)
+		i = end
+	}
+	return strings.Join(out, "\n")
 }
 
 func formatFoldedScalarLines(valueLines []string, info foldedScalarInfo) []string {
@@ -226,12 +237,8 @@ func splitFoldedListItems(value string) []string {
 	return items
 }
 
-func extractFoldedIndicator(line string) string {
-	colonPos := strings.Index(line, ":")
-	if colonPos < 0 {
-		return ">"
-	}
-	valuePart := strings.TrimSpace(line[colonPos+1:])
+func extractFoldedIndicator(value string) string {
+	valuePart := strings.TrimSpace(value)
 	if valuePart == "" {
 		return ">"
 	}
@@ -250,7 +257,7 @@ func stripInlineComment(value string) string {
 	if value == "" {
 		return value
 	}
-	if idx := strings.Index(value, " #"); idx >= 0 {
+	if idx := inlineCommentIndex(value); idx > 0 {
 		return strings.TrimSpace(value[:idx])
 	}
 	return value
@@ -275,6 +282,28 @@ func foldScalarValueFromLines(lines []string) string {
 		result.WriteString(trimmed)
 	}
 	return result.String()
+}
+
+func foldedIndicatorOrDefault(info foldedScalarInfo) string {
+	if info.indicator == "" {
+		return ">"
+	}
+	return info.indicator
+}
+
+// foldedBlockValue decodes the original folded block (indicator plus
+// content lines) with yaml.v3 to obtain its exact value.
+func foldedBlockValue(info foldedScalarInfo) string {
+	indicator := info.indicator
+	if indicator == "" {
+		indicator = ">"
+	}
+	var decoded string
+	src := indicator + "\n" + strings.Join(info.originalLines, "\n") + "\n"
+	if err := yaml.Unmarshal([]byte(src), &decoded); err != nil {
+		return "\x00undecodable"
+	}
+	return decoded
 }
 
 func normalizeFoldedScalarValue(value string) string {

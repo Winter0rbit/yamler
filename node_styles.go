@@ -37,7 +37,7 @@ func preserveNodeStylesWithInfo(node *yaml.Node, info *FormattingInfo, path stri
 				}
 
 				// Preserve scalar styles
-				if style, exists := info.ScalarStyles[key]; exists {
+				if style, exists := info.ScalarStyles[newPath]; exists {
 					node.Content[i+1].Style = style
 				}
 
@@ -53,14 +53,16 @@ func preserveNodeStylesWithInfo(node *yaml.Node, info *FormattingInfo, path stri
 
 		// Process children
 		for _, child := range node.Content {
-			preserveNodeStylesWithInfo(child, info, path)
+			preserveNodeStylesWithInfo(child, info, path+"[]")
 		}
 	}
 }
 
-// stripMergeTags clears the explicit "!!merge" tag that the yaml.v3 decoder
-// attaches to "<<" keys. The v3.0.1 encoder would otherwise render them as
-// "!!merge <<: *anchor" instead of the plain "<<: *anchor" form.
+// stripMergeTags works around two yaml.v3 v3.0.1 encoder quirks:
+//   - "<<" keys carry an explicit "!!merge" tag from the decoder and would be
+//     written as "!!merge <<: *anchor"; the tag is cleared.
+//   - an empty null value inside a flow collection ("{a}", "[{0}]") is
+//     written as ” (an empty string); it is spelled out as "null".
 func stripMergeTags(node *yaml.Node) {
 	if node == nil {
 		return
@@ -68,7 +70,12 @@ func stripMergeTags(node *yaml.Node) {
 	if node.Kind == yaml.ScalarNode && node.Value == "<<" && node.Tag == "!!merge" {
 		node.Tag = ""
 	}
-	for _, child := range node.Content {
+	inFlow := node.Style&yaml.FlowStyle != 0
+	for i, child := range node.Content {
+		isKey := node.Kind == yaml.MappingNode && i%2 == 0
+		if (inFlow || isKey || child.Anchor != "") && child.Kind == yaml.ScalarNode && child.Tag == "!!null" && child.Value == "" {
+			child.Value = "null"
+		}
 		stripMergeTags(child)
 	}
 }

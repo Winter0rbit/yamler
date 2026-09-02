@@ -1,0 +1,33 @@
+---
+# Provision web servers
+- name: Configure web servers
+  hosts: webservers
+  become: yes
+  vars:
+    http_port: 80
+    packages:
+      - nginx
+      - certbot
+  tasks:
+  - name: Install packages
+    apt:
+      name: "{{ item }}"
+      state: present
+    loop: "{{ packages }}"
+
+  - name: Template config
+    template:
+      src: nginx.conf.j2
+      dest: /etc/nginx/nginx.conf
+    notify: restart nginx
+
+  handlers:
+  - name: restart nginx
+    service: name=nginx state=restarted
+
+- name: Configure database
+  hosts: dbservers
+  vars:
+    db_port: 5432
+  roles:
+    - postgres
