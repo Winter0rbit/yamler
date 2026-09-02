@@ -1,189 +1,86 @@
 # YAML Formatting Support in Yamler
 
-This document provides an **accurate assessment** of YAML formatting preservation in the Yamler library based on comprehensive test results.
+This document describes which formatting features Yamler preserves when a document is modified and written back, based on the current test suite (`go test ./...`, 93 top-level tests with ~290 sub-cases, all passing).
 
-## 📊 Current Status: **96.6% Test Success Rate** (313/324 tests)
+## How preservation works
 
-The library has excellent real-world compatibility with only specific edge cases unsupported.
+Yamler parses the document with `gopkg.in/yaml.v3`, keeps the original text next to the node tree and records a formatting snapshot (indentation of every key and list item, flow/block styles, blank lines, comment spacing, document markers). After every modification the node tree is encoded again and the encoder output is post-processed to match the snapshot. Lines that existed in the original get their original layout back; lines added by a modification follow the layout of their parent.
 
-## ✅ Fully Supported Formats (100% working)
+## ✅ Fully Supported
 
-### Core Functionality
-- **Standard Operations**: Set/Get values with perfect type safety
-- **Basic Indentation**: 2, 4, 6, 8 spaces, tabs - all perfectly preserved
-- **Document Structure**: Mapping and sequence nodes with full formatting preservation
-- **String Styles**: Plain, quoted (`""`), single-quoted (`''`) - all preserved
-- **Comment Preservation**: All comment types (line, head, foot) preserved
-- **Empty Lines**: Blank lines between sections perfectly preserved
+### Structure
+- **Indentation**: 2, 4, 6, 8 spaces and other consistent widths; keys keep their exact column
+- **Zero-indent lists** (kubectl / GitHub Actions / Ansible style), including elements appended later:
+  ```yaml
+  containers:
+  - name: web
+    image: nginx
+  ```
+- **Key order**: never reordered; new keys are appended to the end of their mapping
+- **Blank lines** between sections
+- **Document markers**: leading `---` and trailing `...`
+- **Multi-document streams**: `LoadAll` / `DocumentsToBytes` / `SaveAll` keep every document's own formatting and separators (`Load` rejects streams with more than one document instead of dropping the rest)
+- **Array-root documents** (Ansible playbooks) with dedicated methods
 
-### Advanced Features
-- **Document Separators**: `---` and `...` markers fully preserved
-- **Array Document Roots**: Ansible-style array documents fully supported with dedicated methods
-- **Flow Styles**: Inline objects `{key: value}` and arrays `[1, 2, 3]` preserved
-- **Literal Scalars**: Multi-line `|` blocks preserved perfectly
-- **Folded Scalars**: Multi-line `>` blocks preserved perfectly
-- **Wildcard Operations**: `*.field` and `**.recursive` patterns work perfectly
-- **Document Merging**: Smart merging with format preservation
-- **Schema Validation**: Built-in validation with error details
+### Scalars
+- **String styles**: plain, `"double"`, `'single'`
+- **Literal (`|`) and folded (`>`) blocks**, including chomping indicators
+- **Loose booleans** on read: `true/false`, `yes/no`, `on/off`, `1/0`
 
-### Real-World Format Compatibility
-- **Docker Compose**: ✅ Perfect compatibility
-- **Ansible Playbooks**: ✅ Perfect compatibility (including array roots)
-- **Configuration Files**: ✅ Perfect compatibility  
-- **Most Kubernetes**: ✅ Standard k8s manifests work perfectly
-- **GitHub Actions**: ✅ Standard workflows work perfectly
+### Collections
+- **Flow arrays**: `[1, 2, 3]`, compact `[1,2,3]`, spaced `[ 1 , 2 , 3 ]` and multi-line flow arrays keep their style through append/update/remove
+- **Flow objects**: `{key: value}` and multi-line flow objects keep their spacing and field order
+- **Block arrays** keep their indentation
+- **Anchors, aliases and merge keys**: `&anchor`, `*alias`, `<<: *alias` (docker-compose `x-*` extensions)
 
-## ⚠️ Partially Supported Formats
+### Comments
+- Head, foot and inline comments are never lost
+- Inline comment spacing after `key: value` is preserved (relative mode), or all inline comments can be aligned to a column (`SetAbsoluteCommentAlignment`), or removed (`DisableCommentAlignment`)
 
-### Flow Array Operations (4 failing tests)
-- **Status**: ⚠️ **Partial Support**  
-- **Working**: Basic flow arrays `[1, 2, 3]` are preserved perfectly
-- **Issue**: Complex operations on flow arrays (append, update elements) may convert to block style
-- **Example**:
+### Real-world formats covered by tests
+Docker Compose, Kubernetes manifests (single and multi-document), Ansible playbooks, GitHub Actions workflows, generic application configuration files.
+
+## ⚠️ Partially Supported
+
+### Formatting hints keyed by key name
+Blank-line patterns, flow-array/flow-object styles and inline comment spacing are currently recorded per **key name**, not per full path. Two keys with the same name but different styles can influence each other:
 ```yaml
-# Input (preserved for reading)
-tags: [go, yaml, parser]
-
-# After array operations might become:
-tags:
-  - go  
-  - yaml
-  - parser
-  - newitem
+on:
+  push:
+    branches: [main, develop]   # spaced
+  pull_request:
+    branches: [main]            # the later definition wins for both
 ```
-- **Workaround**: Use block-style arrays for frequent modifications
+Indentation is already recorded per path and is not affected.
 
-### Complex Nested Flow Styles (1 failing test)
-- **Status**: ⚠️ **Partial Support**
-- **Working**: Simple nested flow objects work perfectly  
-- **Issue**: Very complex nested flow structures may get simplified
-- **Example**:
+### Comments after bare keys and list items
 ```yaml
-# This works perfectly:
-config: {host: localhost, ports: [80, 443]}
-
-# This complex case might get simplified:
-matrix: {data: [{x: 1, y: [1,2]}, {x: 2, y: [3,4]}]}
+pools:            # kept, but re-spaced to "pools: # ..."
+  - name: primary # kept, but re-spaced
 ```
+Comments following `key: value` pairs keep their spacing.
 
-## ❌ Not Supported (Technical Limitations)
+### Newly created structures
+Arrays and mappings created by `Set`/`AppendToArray` use two-space block style. Map values given as `map[string]interface{}` are written with their keys sorted.
 
-### Comment Alignment (1 failing test)
-- **Status**: ❌ **Not Supported**
-- **Issue**: Comments are preserved but not aligned to columns
-- **Example**:
-```yaml
-# Input:
-host: localhost    # Primary host
-port: 5432         # Standard port
+### Separator comments
+`--- # comment` is preserved, but the comment moves to the line after the separator.
 
-# Output (comments preserved but not aligned):
-host: localhost # Primary host  
-port: 5432 # Standard port
-```
-- **Note**: Comments are never lost, only alignment is not preserved
+## ❌ Not Supported
 
-### Zero-Indent Arrays
-- **Status**: ✅ **Supported**
-- Sequences whose items start at the column of their parent key (kubectl, GitHub Actions, Ansible style) keep that style, including elements added with `AppendToArray`:
-```yaml
-containers:
-- name: web       # Array at same level as key
-  image: nginx
-- name: db
-  image: postgres
-```
+### Tab indentation
+The YAML specification forbids tabs for indentation and `yaml.v3` rejects such input; this is not a library limitation.
 
-### Multi-Document Streams
-- **Status**: ✅ **Supported** via `LoadAll` / `DocumentsToBytes` / `SaveAll`
-- `Load` rejects streams with more than one document instead of silently dropping the rest.
-- A `--- # comment` on the separator line is moved to its own line after the separator.
-
-### Anchors, Aliases and Merge Keys
-- **Status**: ✅ **Supported** (`&anchor`, `*alias`, `<<: *alias`)
-
-### Tab Indentation
-- **Status**: ❌ **Not Supported**
-- **Issue**: YAML specification prohibits tabs for indentation
-- **Note**: This is a YAML spec limitation, not a library limitation
-
-## 📈 Performance Metrics
-
-**Test Statistics**:
-- **Total Tests**: 324
-- **Passing**: 313 (**96.6%**)
-- **Failing**: 11 (**3.4%**)
-
-**Performance** (1MB YAML file):
-- Parse time: ~15ms (vs 8ms for go-yaml)
-- Memory usage: ~2.5MB (vs 1.8MB for go-yaml)  
-- Format preservation: **Perfect** (vs **Lost** for others)
-
-## 🎯 Production Readiness Assessment
-
-### ✅ **Production Ready For**:
-- Configuration file management (100% compatible)
-- Docker Compose workflows (100% compatible)
-- Ansible automation (100% compatible)
-- Standard Kubernetes manifests (100% compatible)
-- CI/CD configuration files (100% compatible)
-- Any YAML that uses standard indentation and block arrays
-
-### ⚠️ **Use With Awareness For**:
-- Heavy flow array modifications (may change to block style)
-- Complex nested flow objects (may get simplified)
-- Comment alignment requirements (alignment lost but comments preserved)
-
-### ❌ **Not Recommended For**:
-- Applications requiring perfect comment column alignment
-
-## 🔄 API Compatibility
-
-### Standard Operations (100% working)
-```go
-// All basic operations work perfectly
-doc.Set("path.to.key", value)
-value, err := doc.Get("path.to.key")
-doc.SetAll("*.pattern", value)
-```
-
-### Array Document Support (100% working)
-```go
-// Full support for array root documents
-doc.SetArrayElement(0, "path", value)
-doc.GetArrayDocumentElement(0, "path")
-doc.AddArrayElement(value)
-```
-
-### Advanced Features (100% working)
-```go
-// Document merging, wildcards, validation all work perfectly
-doc.Merge(otherDoc)
-values, _ := doc.GetAll("**.pattern")
-err := doc.Validate(schema)
-```
+### Directives
+`%YAML` / `%TAG` directives are not preserved.
 
 ## 🚀 Recommendations
 
-### ✅ **Best Practices for Maximum Compatibility**:
-1. **Use block-style arrays** for arrays that will be modified frequently
-2. **Use flow-style arrays** for simple, read-only collections
-3. **Standard indentation** (2, 4, 6, 8 spaces) - all work perfectly
-4. **Add comments liberally** - they're always preserved (position may vary)
-5. **Use array documents** for Ansible-style configurations
-
-### 🔧 **Migration Advice**:
-- **Existing projects**: Library is drop-in compatible for 96.6% of use cases
-- **New projects**: Full feature set available immediately
-- **Complex flow documents**: Test with your specific format before production use
-
-### 🎯 **When to Choose Yamler**:
-- ✅ You need format preservation (competitors lose all formatting)
-- ✅ You work with configuration files, Docker Compose, Ansible
-- ✅ You need type-safe operations and validation
-- ✅ You want powerful wildcard and merging features
-- ❌ You absolutely must preserve comment column alignment
+1. Use `LoadAll` for Kubernetes-style multi-document files.
+2. When a document mixes styles for same-named keys, check the output for that key; keying hints by full path is on the roadmap.
+3. Prefer one `Save` after a batch of modifications: every mutation re-serializes the document internally.
+4. Run your own configuration files through the test in `examples/` (or a quick round-trip test) before relying on the library in production.
 
 ---
 
-*This assessment reflects comprehensive testing of 324 test cases. The library excels in real-world scenarios with only specific edge cases unsupported.* 
+*Status as of the current test suite. See [ROADMAP.md](ROADMAP.md) for planned improvements.*

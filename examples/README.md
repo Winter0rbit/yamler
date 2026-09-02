@@ -40,10 +40,10 @@ cd docker_compose && go run main.go
 
 ### ☸️ [Kubernetes](kubernetes/)
 **Manifest manipulation and scaling**
-- Deployment scaling and updates
-- ConfigMap and Secret management
-- Multi-environment configuration
-- Resource limit adjustments
+- Multi-document manifest (Deployment + Service) via `LoadAll` / `DocumentsToBytes`
+- Deployment scaling, image and resource updates
+- Zero-indent list style preserved
+- Environment variables, volumes and annotations
 
 ```bash
 cd kubernetes && go run main.go
@@ -141,7 +141,7 @@ go run main.go
 ## 🎨 Key Features Demonstrated
 
 ### ✨ **Format Preservation**
-All examples demonstrate Yamler's core strength - perfect preservation of:
+All examples demonstrate Yamler's core strength - preservation of:
 - Original indentation and spacing
 - Comments and their positioning
 - Array styles (flow vs block)
@@ -162,23 +162,19 @@ Examples show comprehensive type-safe operations:
 - **Array Operations**: CRUD with style preservation
 
 ### 🌊 **Complex Structures**
-Perfect handling of:
+Handling of:
 - Multiline flow objects `{key: value, nested: {data: here}}`
 - Flow arrays `[1, 2, 3]` and `[ 1 , 2 , 3 ]`
 - Mixed flow/block styles in same document
 - Custom indentation (2, 4, 6, 8 spaces)
 
-## 📈 **Performance Highlights**
+## 📈 **Performance**
 
-Examples demonstrate real performance improvements:
-- **21% faster** ToBytes operations
-- **48% faster** formatting detection  
-- **79% faster** path parsing with caching
-- **14-25% improvement** in real-world scenarios
+The `advanced_performance` example shows the effect of the formatting cache, the path cache and of using `SetAll` instead of many individual `Set` calls. Numbers depend on the machine; run `go test -bench . -benchmem` in the repository root for the library benchmarks.
 
-## 🎯 **Real-World Compatibility: 100%**
+## 🎯 **Real-World Compatibility**
 
-All examples work with production configurations:
+The examples use production-style configurations:
 - ✅ **Docker Compose** files
 - ✅ **Kubernetes** manifests  
 - ✅ **Ansible** playbooks

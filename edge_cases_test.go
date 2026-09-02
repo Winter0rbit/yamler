@@ -242,3 +242,59 @@ func TestSplitDocumentsEdgeCases(t *testing.T) {
 		}
 	}
 }
+
+func TestDocumentedBehaviours(t *testing.T) {
+	// GetBool accepts true/false, yes/no, on/off and 1/0.
+	d, _ := Load("a: yes\nb: on\nc: 1\nd: off\ne: 0\nf: 2\n")
+	for k, want := range map[string]bool{"a": true, "b": true, "c": true, "d": false, "e": false} {
+		got, err := d.GetBool(k)
+		if err != nil || got != want {
+			t.Errorf("GetBool(%s) = %v, %v; want %v", k, got, err, want)
+		}
+	}
+	if _, err := d.GetBool("f"); err == nil {
+		t.Error("GetBool(2) should fail")
+	}
+
+	// Wildcards combined with array indices.
+	d, _ = Load("svc:\n  a:\n    ports: [80, 81]\n  b:\n    ports: [8080]\n")
+	m, err := d.GetAll("svc.*.ports[0]")
+	if err != nil || len(m) != 2 || m["svc.a.ports[0]"] != int64(80) {
+		t.Errorf("GetAll(svc.*.ports[0]) = %v, %v", m, err)
+	}
+	if err := d.SetAll("svc.*.ports[0]", 1); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := d.GetInt("svc.b.ports[0]"); v != 1 {
+		t.Errorf("SetAll with index did not apply: %v", v)
+	}
+
+	// Get on array-root documents.
+	d, _ = Load("- name: a\n  tags: [x, y]\n- name: b\n")
+	if v, err := d.GetString("[1].name"); err != nil || v != "b" {
+		t.Errorf("GetString([1].name) = %q, %v", v, err)
+	}
+	if v, err := d.GetString("[0].tags[1]"); err != nil || v != "y" {
+		t.Errorf("GetString([0].tags[1]) = %q, %v", v, err)
+	}
+	if n, err := d.GetSlice(""); err != nil || len(n) != 2 {
+		t.Errorf("GetSlice('') = %v, %v", n, err)
+	}
+	if _, err := d.Get("name"); err == nil {
+		t.Error("Get without index on array root should fail")
+	}
+
+	// JSON Schema type names are accepted.
+	rule, err := LoadSchemaFromString(`{"type":"object","properties":{"port":{"type":"integer","minimum":1},"ratio":{"type":"number"},"on":{"type":"boolean"}},"required":["port"]}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, _ = Load("port: 80\nratio: 0.5\non: true\n")
+	if err := d.Validate(rule); err != nil {
+		t.Errorf("valid document rejected: %v", err)
+	}
+	d, _ = Load("port: 0\n")
+	if err := d.Validate(rule); err == nil {
+		t.Error("minimum violation not reported")
+	}
+}

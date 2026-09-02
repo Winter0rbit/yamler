@@ -45,7 +45,7 @@ func validateNode(node *yaml.Node, schema *ValidationRule, path string) error {
 		return nil
 	}
 
-	switch schema.Type {
+	switch normalizeSchemaType(schema.Type) {
 	case TypeString:
 		return validateString(node, schema, path)
 	case TypeInt:
@@ -418,4 +418,20 @@ func uniqueItemKey(node *yaml.Node) string {
 	}
 	_ = encoder.Close()
 	return fmt.Sprintf("%v", node)
+}
+
+// normalizeSchemaType maps JSON Schema type names onto the library's own
+// SchemaType values so that plain JSON Schema documents can be used.
+func normalizeSchemaType(t SchemaType) SchemaType {
+	switch t {
+	case "object":
+		return TypeMap
+	case "integer":
+		return TypeInt
+	case "number":
+		return TypeFloat
+	case "boolean":
+		return TypeBool
+	}
+	return t
 }

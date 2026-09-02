@@ -1,121 +1,61 @@
 # Yamler Development Roadmap
 
-## Current State Analysis
+## Current State
 
-**Project Stats:**
-- **Core Code**: 3,270 lines
-- **Test Coverage**: 5,196 lines of tests (158% test-to-code ratio)
-- **Test Success Rate**: 94.7% (304/321 tests passing)
-- **Dependencies**: Minimal (only `gopkg.in/yaml.v3`)
+**Project stats** (see `go test -cover ./...`):
+- Core code: ~4 000 lines across topic files (`document.go`, `formatting_*.go`, `flow_styles.go`, `array.go`, ...)
+- Tests: 93 top-level tests with ~290 sub-cases, all passing under `-race`; ~77% statement coverage
+- Dependencies: only `gopkg.in/yaml.v3`
 
-**Current Strengths:**
-- ✅ Excellent formatting preservation (custom indentation, comments, structure)
-- ✅ Comprehensive type-safe API (getters/setters for all Go types)
-- ✅ Advanced array operations with style preservation
-- ✅ Wildcard pattern matching (`*`, `**`)
-- ✅ Document merging with format preservation
-- ✅ Schema validation support
-- ✅ Array document roots (Ansible-style)
-- ✅ Production-ready error handling
+**Done:**
+- ✅ Formatting preservation: indentation (including zero-indent lists), comments, blank lines, flow/block styles, literal/folded scalars, document markers
+- ✅ Type-safe getters/setters, array CRUD, array-root documents
+- ✅ Wildcards (`*`, `**`, `[*]`, indices), document merging, schema validation (JSON Schema type names accepted)
+- ✅ Multi-document streams (`LoadAll` / `SaveAll`)
+- ✅ Anchors, aliases and merge keys survive round trips
+- ✅ Path-based exact indentation (keys and list items keyed by full path)
+- ✅ Benchmarks for load, serialize, get, set, wildcards and arrays (`benchmark_test.go`)
+- ✅ Formatting-info and path caches, pooled buffers
+- ✅ CI: tests with `-race`, `gofmt`, `go vet`, `goimports`
 
-## 🎯 Development Priorities
+## 🎯 Priorities
 
-### Phase 1: Fix Current Issues
-**Goal**: Reach 98%+ test success rate
+### Phase 1: Path-keyed formatting hints
+**Goal**: no more cross-talk between same-named keys.
 
-#### 1.1 Remaining Test Failures
-- [ ] Fix multiline flow objects edge cases
-- [ ] Improve error handling for malformed YAML
-- [ ] Fix remaining 17 failing tests
+- [ ] Blank lines (`EmptyLines`) keyed by path via `lineWalker`
+- [ ] Flow array / flow object styles keyed by path
+- [ ] Inline comment spacing keyed by path; keep spacing for comments after bare keys and list items
+- [ ] Inherit the document's dominant list style (zero-indent vs indented) for newly created arrays
 
-#### 1.2 Code Quality
-- [ ] Reduce code duplication in core functions
-- [ ] Simplify complex functions (>50 lines)
-- [ ] Add missing error checks
+### Phase 2: API completeness
+- [ ] `Has(path)` / `Delete(path)` / `Keys(path)` / `Copy()`
+- [ ] Typed error values (`ErrNotFound`, `ErrType`, `ErrIndex`) usable with `errors.Is`
+- [ ] Array slices in paths (`items[1:3]`)
+- [ ] Keep insertion position for new keys (e.g. insert after a given key)
 
-### Phase 2: Performance Improvements
-**Goal**: Handle larger files efficiently
+### Phase 3: Performance
+- [ ] Avoid re-serializing the whole document on every mutation (serialize lazily on `ToBytes`)
+- [ ] Profile and benchmark 1 MB+ and 10 MB+ documents; target memory < 2x file size
+- [ ] Performance regression benchmarks in CI
 
-#### 2.1 Basic Optimizations
-- [ ] Profile memory usage for large documents
-- [ ] Optimize string operations in path parsing
-- [ ] Cache frequently accessed nodes
-- [ ] Reduce allocations in ToBytes()
+### Phase 4: Format details
+- [ ] Preserve `%YAML` / `%TAG` directives
+- [ ] Keep comments on `---` separator lines in place
+- [ ] Preserve CRLF line endings
+- [ ] Preserve key order of `map[string]interface{}` values (ordered input type)
 
-#### 2.2 Benchmarks
-- [ ] Add benchmarks for all core operations
-- [ ] Test with files 1MB+, 10MB+
-- [ ] Memory usage profiling
+### Phase 5: Tooling
+- [ ] Configuration diff between two documents
+- [ ] Environment variable substitution helpers
+- [ ] JSON ↔ YAML conversion with formatting
 
-### Phase 3: Enhanced Functionality
-**Goal**: Add practical features users need
-
-#### 3.1 Better Path Support
-- [ ] Path validation before operations
-- [ ] Support for array slice operations (`array[1:3]`)
-- [ ] Better error messages for invalid paths
-
-#### 3.2 Utility Methods
-- [ ] `HasKey()` method for checking existence
-- [ ] `Delete()` method for removing keys
-- [ ] `Copy()` method for duplicating documents
-- [ ] `Keys()` method for listing all keys
-
-#### 3.3 Format Detection
-- [ ] Detect and preserve YAML version (`%YAML 1.1`)
-- [ ] Handle document separators (`---`)
-- [ ] Preserve custom line endings
-
-### Phase 4: Real-World Integration
-**Goal**: Make library production-ready for common use cases
-
-#### 4.1 Common Formats Support
-- [ ] Docker Compose advanced features
-- [ ] Kubernetes resource improvements
-- [ ] GitHub Actions complex workflows
-- [ ] CI/CD pipeline configurations
-
-#### 4.2 Validation Improvements  
-- [ ] Schema validation with better error messages
-- [ ] Type checking for common patterns
-- [ ] Required field validation
-
-#### 4.3 Import/Export
-- [ ] JSON to YAML conversion with formatting
-- [ ] Environment variable substitution
-- [ ] Configuration templates
-
-## 🔧 Technical Improvements
-
-### Code Organization
-- [ ] Split large files into smaller modules
-- [ ] Better separation of concerns
-- [ ] Extract common utilities
-
-### Error Handling
-- [ ] More specific error types
-- [ ] Better error messages with context
-- [ ] Graceful handling of edge cases
-
-### Testing
-- [ ] Property-based testing for edge cases
-- [ ] Integration tests with real files
-- [ ] Performance regression tests
+## 🔧 Technical Debt
+- [ ] Reduce the remaining key-name-based heuristics in `flow_styles.go` and `comments.go`
+- [ ] Property-based / fuzz tests for round-trip stability (`Load` → `ToBytes` must be identity for untouched documents)
+- [ ] `examples/advanced_performance` lacks a `go.sum` (`go mod tidy`)
 
 ## 📈 Success Metrics
-
-### Quality Targets
-- [ ] 98%+ test success rate
-- [ ] Handle 10MB+ YAML files
-- [ ] Memory usage <2x file size
-- [ ] Zero panic conditions
-
-### Practical Goals
-- [ ] Works with all common YAML formats
-- [ ] Preserves formatting in 95%+ cases
-- [ ] Easy to use API
-- [ ] Good error messages
-
----
-
-**Current Version**: v1.1.0 
+- [ ] `Load` → `ToBytes` round trip is byte-identical for all test fixtures
+- [ ] Handle 10 MB+ YAML files
+- [ ] Zero panics on arbitrary (fuzzed) input
