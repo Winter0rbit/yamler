@@ -445,11 +445,9 @@ Errors include context about:
 - ✅ **GitHub Actions** workflows (jobs, steps, matrix)
 - ✅ **CI/CD configurations** (various pipeline formats)
 
-**Edge Cases (2 tests disabled):**
-- ⚠️ **Zero-indent arrays**: Kubernetes style `containers:\n- item`
-- ⚠️ **GitHub Actions style**: Similar zero-indent requirements
-
-These are architectural limitations requiring major changes.
+- ✅ **Zero-indent arrays**: Kubernetes style `containers:\n- item`
+- ✅ **Multi-document streams**: `LoadAll` / `SaveAll`
+- ✅ **Anchors and merge keys**: `<<: *defaults`
 
 ### Format Support Matrix
 
@@ -530,7 +528,6 @@ These are architectural limitations requiring major changes.
 - **Incremental parsing** for partial updates
 
 ### Format Support
-- **Zero-indent arrays** (architectural challenge)
 - **Custom comment styles** (configurable formatting)
 - **Advanced flow styles** (more complex structures)
 - **YAML 1.2 features** (additional specification support)

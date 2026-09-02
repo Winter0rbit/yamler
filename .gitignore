@@ -1,2 +1,18 @@
-.idea/.gitignore
-.idea/material_theme_project_new.xml
+# Test and coverage artifacts
+coverage.out
+coverage.txt
+*.test
+*.prof
+test_results.log
+
+# Build output
+/bin/
+/dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
