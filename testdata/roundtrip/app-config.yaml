@@ -1,0 +1,35 @@
+# Application configuration
+app:
+    name: myapp           # 4-space indentation
+    version: '1.4.2'
+    debug: no
+
+    features:
+        - auth
+        - metrics         # collected every minute
+        - "quoted-item"
+
+    limits: {cpu: 2, memory: 512Mi}
+    matrix: [
+        [1, 2, 3],
+        [4, 5, 6]
+    ]
+
+database:
+    host: localhost
+    port: 5432
+    replicas:
+        - host: r1
+          weight: 10
+        - host: r2
+          weight: 5
+    description: |
+        Multi-line
+          literal block
+    motto: >-
+        folded
+        block
+
+empty_map: {}
+empty_list: []
+nothing: ~

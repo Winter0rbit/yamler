@@ -13,20 +13,19 @@
 - ✅ Wildcards (`*`, `**`, `[*]`, indices), document merging, schema validation (JSON Schema type names accepted)
 - ✅ Multi-document streams (`LoadAll` / `SaveAll`)
 - ✅ Anchors, aliases and merge keys survive round trips
-- ✅ Path-based exact indentation (keys and list items keyed by full path)
+- ✅ All formatting hints keyed by full path (indentation, blank lines, flow styles, comments, block scalars)
+- ✅ Round-trip corpus of real-world files and a fuzz test (`FuzzRoundTrip`)
 - ✅ Benchmarks for load, serialize, get, set, wildcards and arrays (`benchmark_test.go`)
 - ✅ Formatting-info and path caches, pooled buffers
 - ✅ CI: tests with `-race`, `gofmt`, `go vet`, `goimports`
 
 ## 🎯 Priorities
 
-### Phase 1: Path-keyed formatting hints
-**Goal**: no more cross-talk between same-named keys.
-
-- [ ] Blank lines (`EmptyLines`) keyed by path via `lineWalker`
-- [ ] Flow array / flow object styles keyed by path
-- [ ] Inline comment spacing keyed by path; keep spacing for comments after bare keys and list items
+### Phase 1: Remaining layout details
+- [ ] Per-item layout records for lists whose items are laid out differently
+- [ ] Preserve flow collections that contain comments
 - [ ] Inherit the document's dominant list style (zero-indent vs indented) for newly created arrays
+- [ ] Grow the round-trip corpus (Helm charts, Compose v2 profiles, OpenAPI specs)
 
 ### Phase 2: API completeness
 - [ ] `Has(path)` / `Delete(path)` / `Keys(path)` / `Copy()`
@@ -51,11 +50,10 @@
 - [ ] JSON ↔ YAML conversion with formatting
 
 ## 🔧 Technical Debt
-- [ ] Reduce the remaining key-name-based heuristics in `flow_styles.go` and `comments.go`
-- [ ] Property-based / fuzz tests for round-trip stability (`Load` → `ToBytes` must be identity for untouched documents)
+- [ ] Run `FuzzRoundTrip` periodically in CI (nightly job)
 - [ ] `examples/advanced_performance` lacks a `go.sum` (`go mod tidy`)
 
 ## 📈 Success Metrics
-- [ ] `Load` → `ToBytes` round trip is byte-identical for all test fixtures
+- [x] `Load` → `ToBytes` round trip is byte-identical for all corpus fixtures
 - [ ] Handle 10 MB+ YAML files
-- [ ] Zero panics on arbitrary (fuzzed) input
+- [x] Zero panics on arbitrary (fuzzed) input (no panic found by `FuzzRoundTrip` so far)

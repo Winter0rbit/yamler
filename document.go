@@ -123,13 +123,13 @@ func Load(content string) (*Document, error) {
 	// Count trailing newlines
 	trailingNewlines := 0
 	for i := len(content) - 1; i >= 0; i-- {
-		if content[i] == '\n' {
+		switch content[i] {
+		case '\n':
 			trailingNewlines++
-		} else if content[i] == '\r' {
-			// Skip carriage returns
-			continue
-		} else {
-			break
+		case '\r', ' ', '\t':
+			// Whitespace after the last line break is not content.
+		default:
+			i = -1
 		}
 	}
 
@@ -233,7 +233,7 @@ func (d *Document) ToBytes() ([]byte, error) {
 		result = preserveOriginalFormatting(result, d.raw, indentInfo, d.preserveDocumentSeparator)
 	}
 
-	// Remove any trailing newlines that might have been added by the encoder
+	// Remove any trailing newlines that might have been added by the encoder.
 	for len(result) > 0 && result[len(result)-1] == '\n' {
 		result = result[:len(result)-1]
 	}

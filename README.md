@@ -380,10 +380,11 @@ Every mutation re-serializes the document to keep the formatting snapshot curren
 ## ⚠️ Known Limitations
 
 - Tab indentation is rejected by the YAML parser (the YAML spec forbids tabs for indentation).
-- Some formatting hints are keyed by key name rather than by full path, so two keys with the same name but different styles (for example `branches: [main, develop]` and `branches: [main]`) can influence each other's spacing or blank lines.
-- Comments after a key without an inline value (`pools:  # note`) or after list items are kept but re-spaced to a single space.
+- Items of one list share a formatting record, so if items of the same list are laid out differently the first item's layout wins.
+- Flow collections with comments inside (`[a, # c`) are re-formatted by the encoder.
 - A comment on a `---` separator line is moved to the following line.
 - New arrays created by `Set`/`AppendToArray` use two-space block style; existing arrays keep their own style.
+- Tabs inside values, CR-only line breaks and explicit tags (`!!str`) are outside what the round-trip tests cover.
 
 See [FORMATTING_SUPPORT.md](FORMATTING_SUPPORT.md) for the detailed compatibility matrix and [FEATURES.md](FEATURES.md) for a feature walkthrough.
 

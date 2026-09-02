@@ -92,7 +92,7 @@ func splitDocuments(content string) []string {
 // preserves the formatting of its own part of the stream; use
 // DocumentsToBytes or SaveAll to serialize them back together.
 func LoadAll(content string) ([]*Document, error) {
-	if strings.TrimSpace(content) == "" {
+	if strings.Trim(content, " \t\r\n") == "" {
 		return nil, nil
 	}
 	var docs []*Document
