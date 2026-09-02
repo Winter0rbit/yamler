@@ -83,20 +83,24 @@ port: 5432 # Standard port
 ```
 - **Note**: Comments are never lost, only alignment is not preserved
 
-### Zero-Indent Arrays (Disabled in tests)
-- **Status**: ❌ **Not Supported** 
-- **Issue**: Kubernetes/GitHub Actions style zero-indent arrays require custom YAML encoder
-- **Example**:
+### Zero-Indent Arrays
+- **Status**: ✅ **Supported**
+- Sequences whose items start at the column of their parent key (kubectl, GitHub Actions, Ansible style) keep that style, including elements added with `AppendToArray`:
 ```yaml
-# Not supported:
 containers:
 - name: web       # Array at same level as key
   image: nginx
 - name: db
   image: postgres
 ```
-- **Workaround**: Use standard indented arrays (works perfectly)
-- **Note**: This is an architectural limitation requiring major changes
+
+### Multi-Document Streams
+- **Status**: ✅ **Supported** via `LoadAll` / `DocumentsToBytes` / `SaveAll`
+- `Load` rejects streams with more than one document instead of silently dropping the rest.
+- A `--- # comment` on the separator line is moved to its own line after the separator.
+
+### Anchors, Aliases and Merge Keys
+- **Status**: ✅ **Supported** (`&anchor`, `*alias`, `<<: *alias`)
 
 ### Tab Indentation
 - **Status**: ❌ **Not Supported**
@@ -131,7 +135,6 @@ containers:
 - Comment alignment requirements (alignment lost but comments preserved)
 
 ### ❌ **Not Recommended For**:
-- Zero-indent array documents (architectural limitation)
 - Applications requiring perfect comment column alignment
 
 ## 🔄 API Compatibility
@@ -180,7 +183,6 @@ err := doc.Validate(schema)
 - ✅ You need type-safe operations and validation
 - ✅ You want powerful wildcard and merging features
 - ❌ You absolutely must preserve comment column alignment
-- ❌ You require zero-indent array support
 
 ---
 

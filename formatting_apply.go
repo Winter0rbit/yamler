@@ -4,7 +4,6 @@
 package yamler
 
 import (
-	"fmt"
 	"strings"
 )
 
@@ -15,8 +14,8 @@ func preserveOriginalFormatting(newContent []byte, original string, info *Format
 	// Convert spaces to tabs if original used tabs
 	if info.UseTabs {
 		newStr = convertSpacesToTabs(newStr, info)
-	} else if info.IndentSize != 2 && len(info.KeyIndents) == 0 {
-		// Handle custom space indentation (4, 6, 8 spaces, etc.) only if we don't have exact indents
+	} else if info.IndentSize != 2 {
+		// Handle custom space indentation (4, 6, 8 spaces, etc.)
 		newStr = convertToCustomIndentation(newStr, info.IndentSize)
 	}
 
@@ -30,6 +29,10 @@ func preserveOriginalFormatting(newContent []byte, original string, info *Format
 	// Apply flow object styles to preserve spacing
 	newStr = applyFlowObjectStyles(newStr, info)
 
+	// Apply zero-indent array formatting before exact indentations so that
+	// keys nested in zero-indent items are measured at their final column
+	newStr = applyZeroIndentArrays(newStr, info)
+
 	// Apply exact key indentations
 	newStr = applyExactIndentations(newStr, info)
 
@@ -38,9 +41,6 @@ func preserveOriginalFormatting(newContent []byte, original string, info *Format
 
 	// Preserve folded scalar formatting
 	newStr = preserveFoldedScalars(newStr, original, info)
-
-	// Apply zero-indent array formatting
-	newStr = applyZeroIndentArrays(newStr, info)
 
 	// Align inline comments
 	newStr = alignInlineComments(newStr, info)
@@ -188,72 +188,65 @@ func applyEmptyLinePatterns(content string, info *FormattingInfo) string {
 	return strings.Join(result, "\n")
 }
 
-// applyExactIndentations applies exact indentations for keys that had custom indents
+// applyExactIndentations moves every key and sequence item that existed in
+// the original document back to its original column. When a line is moved,
+// the block nested under it moves with it, so lines added by modifications
+// keep their position relative to their parent.
 func applyExactIndentations(content string, info *FormattingInfo) string {
 	if len(info.KeyIndents) == 0 {
 		return content
 	}
 
 	lines := strings.Split(content, "\n")
-
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-
-		// Handle array elements
-		if strings.HasPrefix(trimmed, "- ") {
-			currentIndent := getLineIndentation(line)
-			// Look for a matching array element indentation
-			arrayElementKey := fmt.Sprintf("__array_element_%d__", currentIndent)
-			if exactIndent, exists := info.KeyIndents[arrayElementKey]; exists {
-				if currentIndent != exactIndent {
-					// Replace the line with correct indentation
-					newLine := strings.Repeat(" ", exactIndent) + trimmed
-					lines[i] = newLine
-				}
-			} else {
-				// Try to find any array element indentation pattern
-				for key, exactIndent := range info.KeyIndents {
-					if strings.HasPrefix(key, "__array_element_") {
-						// Use this indentation for array elements
-						newLine := strings.Repeat(" ", exactIndent) + trimmed
-						lines[i] = newLine
-						break
-					}
-				}
-			}
-		} else if strings.Contains(trimmed, ":") && !strings.HasPrefix(trimmed, "#") {
-			// Handle regular keys
-			if idx := strings.Index(trimmed, ":"); idx > 0 {
-				key := strings.TrimSpace(trimmed[:idx])
-
-				// Check if this key has a specific indentation
-				if exactIndent, exists := info.KeyIndents[key]; exists {
-					currentIndent := getLineIndentation(line)
-
-					// Only apply indentation if the current indentation is different from expected
-					// and it's not a case where we're trying to add indentation to a root key
-					if currentIndent != exactIndent {
-						// Special case: if exactIndent is 0 and currentIndent is also 0, don't change
-						if exactIndent == 0 && currentIndent == 0 {
-							continue
-						}
-						// Replace the line with correct indentation
-						newLine := strings.Repeat(" ", exactIndent) + trimmed
-						lines[i] = newLine
-					}
-				}
-			}
+	w := newLineWalker()
+	for i := 0; i < len(lines); i++ {
+		li := w.next(lines[i])
+		if li.skip {
+			continue
 		}
+		var want int
+		var ok bool
+		switch {
+		case li.isItem:
+			want, ok = info.KeyIndents[li.path+"[]"]
+		case li.key != "":
+			want, ok = info.KeyIndents[li.keyPath]
+		}
+		if !ok || want == li.indent {
+			continue
+		}
+		shiftBlock(lines, i, li.indent, want-li.indent)
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+// shiftBlock changes the indentation of lines[start] and of every following
+// line that is nested under it (indented deeper than blockIndent) by delta
+// columns. Blank lines are left untouched.
+func shiftBlock(lines []string, start, blockIndent, delta int) {
+	for j := start; j < len(lines); j++ {
+		trimmed := strings.TrimSpace(lines[j])
+		if trimmed == "" {
+			continue
+		}
+		indent := getLineIndentation(lines[j])
+		if j > start && indent <= blockIndent {
+			break
+		}
+		newIndent := indent + delta
+		if newIndent < 0 {
+			newIndent = 0
+		}
+		lines[j] = strings.Repeat(" ", newIndent) + strings.TrimLeft(lines[j], " ")
+	}
 }
 
 // restoreDocumentSeparators adds back document separators if they were in the original
 func restoreDocumentSeparators(content string, info *FormattingInfo, originalContent string, preserveDocumentSeparator bool) string {
 	// Check if the original content actually starts with ---
 	originallyHadDocumentStart := strings.HasPrefix(strings.TrimSpace(originalContent), "---")
-	originallyHadDocumentEnd := strings.HasSuffix(strings.TrimSpace(originalContent), "...")
+	originallyHadDocumentEnd := lastLineIs(originalContent, "...")
 
 	// Don't add separators if preservation is disabled or they weren't in original
 	if !preserveDocumentSeparator || (!originallyHadDocumentStart && !originallyHadDocumentEnd) {
@@ -285,70 +278,46 @@ func restoreDocumentSeparators(content string, info *FormattingInfo, originalCon
 	return strings.Join(result, "\n")
 }
 
-// applyZeroIndentArrays applies zero-indent formatting to arrays that should have it
+// applyZeroIndentArrays re-indents block sequences that were written in
+// zero-indent style in the original document. The encoder always indents
+// items relative to the parent key, so each such sequence is shifted left by
+// the difference between the item column and the key column.
 func applyZeroIndentArrays(content string, info *FormattingInfo) string {
 	if len(info.ZeroIndentArrays) == 0 {
 		return content
 	}
 
 	lines := strings.Split(content, "\n")
-
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-
-		// Look for keys that should have zero-indent arrays
-		if strings.Contains(trimmed, ":") && !strings.Contains(trimmed, "- ") {
-			if idx := strings.Index(trimmed, ":"); idx > 0 {
-				key := strings.TrimSpace(trimmed[:idx])
-
-				if info.ZeroIndentArrays[key] {
-					// Found a zero-indent array, adjust following array elements
-					keyIndent := getLineIndentation(line)
-
-					// Process following lines that are array elements
-					for j := i + 1; j < len(lines); j++ {
-						nextLine := lines[j]
-						nextTrimmed := strings.TrimSpace(nextLine)
-
-						if nextTrimmed == "" {
-							continue // Skip empty lines
-						}
-
-						if strings.HasPrefix(nextTrimmed, "- ") {
-							// This is an array element
-							nextIndent := getLineIndentation(nextLine)
-
-							// If it has extra indentation, remove it to match key level
-							if nextIndent > keyIndent {
-								// Remove extra indentation to match key level
-								newIndent := strings.Repeat(" ", keyIndent)
-								lines[j] = newIndent + nextTrimmed
-							}
-						} else {
-							// Non-array element, check if it belongs to the array element
-							nextIndent := getLineIndentation(nextLine)
-							if nextIndent > keyIndent {
-								// This might be a nested element of the array item
-								// Adjust its indentation relative to the array element
-								baseArrayIndent := keyIndent
-								expectedElementIndent := baseArrayIndent + info.IndentSize
-								if nextIndent > expectedElementIndent {
-									// Reduce indentation
-									reduction := info.IndentSize
-									newIndent := nextIndent - reduction
-									if newIndent < expectedElementIndent {
-										newIndent = expectedElementIndent
-									}
-									lines[j] = strings.Repeat(" ", newIndent) + nextTrimmed
-								}
-							} else {
-								// Not part of this array anymore
-								break
-							}
-						}
-					}
-				}
+	w := newLineWalker()
+	for i := 0; i < len(lines); i++ {
+		li := w.next(lines[i])
+		if li.skip || li.key == "" || !info.ZeroIndentArrays[li.keyPath] {
+			continue
+		}
+		// Find the first item of the sequence that follows this key.
+		j := i + 1
+		for j < len(lines) && (strings.TrimSpace(lines[j]) == "" || strings.HasPrefix(strings.TrimSpace(lines[j]), "#")) {
+			j++
+		}
+		if j >= len(lines) {
+			break
+		}
+		first := strings.TrimSpace(lines[j])
+		itemIndent := getLineIndentation(lines[j])
+		if (first != "-" && !strings.HasPrefix(first, "- ")) || itemIndent <= li.indent {
+			continue
+		}
+		shift := itemIndent - li.indent
+		// Shift the whole sequence block (items and their nested content).
+		for ; j < len(lines); j++ {
+			trimmed := strings.TrimSpace(lines[j])
+			if trimmed == "" {
+				continue
 			}
+			if getLineIndentation(lines[j]) < itemIndent {
+				break
+			}
+			lines[j] = lines[j][shift:]
 		}
 	}
 
@@ -375,4 +344,13 @@ func leadingWhitespace(line string) string {
 		}
 	}
 	return line
+}
+
+// lastLineIs reports whether the last non-empty line of content is exactly marker.
+func lastLineIs(content, marker string) bool {
+	content = strings.TrimRight(content, " \t\r\n")
+	if i := strings.LastIndexByte(content, '\n'); i >= 0 {
+		content = content[i+1:]
+	}
+	return strings.TrimSpace(content) == marker
 }

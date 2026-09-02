@@ -4,7 +4,6 @@
 package yamler
 
 import (
-	"fmt"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -30,9 +29,6 @@ func detectFormattingInfoOptimized(raw string) *FormattingInfo {
 		FlowObjectStyles: make(map[string]string),
 	}
 
-	// Pre-allocate slices with reasonable capacity
-	indentLevels := make([]int, 0, 32)
-
 	// Process lines to detect formatting patterns
 	lines := strings.Split(raw, "\n")
 	emptyLineCount := 0
@@ -41,10 +37,14 @@ func detectFormattingInfoOptimized(raw string) *FormattingInfo {
 		if strings.TrimSpace(line) == "" {
 			emptyLineCount++
 		} else {
-			processLineOptimized(line, i, emptyLineCount, info, &indentLevels)
+			processLineOptimized(line, i, emptyLineCount, info)
 			emptyLineCount = 0
 		}
 	}
+
+	// Structural lines only (no block scalar contents or comments) decide
+	// the indentation step.
+	indentLevels := detectLineIndents(lines, info, make([]int, 0, 32))
 
 	// Find the most common indentation increment if not using tabs
 	if !info.UseTabs && len(indentLevels) > 0 {
@@ -58,33 +58,6 @@ func detectFormattingInfoOptimized(raw string) *FormattingInfo {
 	if len(info.CommentAlignment) > 0 {
 		info.CommentSpacing = findCommonCommentAlignment(info.CommentAlignment)
 	}
-
-	// Filter KeyIndents to keep only non-standard indentations
-	filteredKeyIndents := make(map[string]int)
-	for key, indent := range info.KeyIndents {
-		// Check if this indent is a standard multiple of IndentSize
-		if indent == 0 {
-			// Root level keys - only keep if they have non-zero indent (custom)
-			continue
-		} else if info.IndentSize > 0 && indent%info.IndentSize == 0 {
-			// Standard indentation - but check if it's actually expected for this nesting level
-			expectedLevel := indent / info.IndentSize
-
-			// Only filter out if it's a reasonable and expected standard indentation
-			// For custom indentations like 6 spaces at level 1, we should keep it
-			if expectedLevel == 1 && indent == info.IndentSize {
-				// Standard first level indentation (2, 4, etc.) - filter out
-				continue
-			} else if expectedLevel == 2 && indent == info.IndentSize*2 {
-				// Standard second level indentation (4, 8, etc.) - filter out
-				continue
-			}
-			// For all other cases (like 6 spaces), keep as custom indentation
-		}
-		// Keep custom indentations
-		filteredKeyIndents[key] = indent
-	}
-	info.KeyIndents = filteredKeyIndents
 
 	// Detect multiline flow objects after processing all lines
 	detectMultilineFlowObjects(lines, info)
@@ -170,7 +143,7 @@ func collectMultilineFlowObject(lines []string, startLine int, openBrace, closeB
 }
 
 // processLineOptimized processes a single line efficiently
-func processLineOptimized(line string, lineNum, emptyLinesBefore int, info *FormattingInfo, indentLevels *[]int) {
+func processLineOptimized(line string, lineNum, emptyLinesBefore int, info *FormattingInfo) {
 	if len(line) == 0 {
 		return
 	}
@@ -199,10 +172,7 @@ func processLineOptimized(line string, lineNum, emptyLinesBefore int, info *Form
 
 	content := line[contentStart:]
 
-	// Collect indentation levels
-	if leadingSpaces > 0 && !info.UseTabs {
-		*indentLevels = append(*indentLevels, leadingSpaces)
-	} else if leadingTabs > 0 {
+	if leadingTabs > 0 {
 		info.IndentSize = 4
 	}
 
@@ -228,11 +198,8 @@ func processLineOptimized(line string, lineNum, emptyLinesBefore int, info *Form
 		return
 	}
 
-	// Handle array elements (lines starting with "- ")
+	// Array elements (lines starting with "- ") are handled by detectLineIndents
 	if strings.HasPrefix(content, "- ") {
-		// Store indentation for array elements using a special key format
-		arrayElementKey := fmt.Sprintf("__array_element_%d__", leadingSpaces)
-		info.KeyIndents[arrayElementKey] = leadingSpaces
 		return
 	}
 
@@ -259,11 +226,6 @@ func processLineOptimized(line string, lineNum, emptyLinesBefore int, info *Form
 	if emptyLinesBefore > 0 {
 		info.EmptyLines[key] = emptyLinesBefore
 	}
-
-	// Store exact indentation for this key only if it's non-standard
-	// We need to check against the detected indent size after processing all lines
-	// For now, store all indents and filter later
-	info.KeyIndents[key] = leadingSpaces
 
 	// Check for flow styles, scalar styles, and comments in one pass
 	valueStart := colonPos + 1
@@ -448,4 +410,41 @@ func findCommonCommentAlignment(alignments map[string]int) int {
 func detectIndentation(raw string) int {
 	info := detectFormattingInfoOptimized(raw)
 	return info.IndentSize
+}
+
+// detectLineIndents records the exact column of every mapping key and of
+// every sequence item, keyed by path (see lineWalker). Items are stored
+// under "<sequence path>[]". Sequences whose items start at the same column
+// as their parent key (kubectl / GitHub Actions style) are additionally
+// recorded in ZeroIndentArrays.
+func detectLineIndents(lines []string, info *FormattingInfo, indentLevels []int) []int {
+	w := newLineWalker()
+	var lastKey *lineInfo
+	for _, line := range lines {
+		li := w.next(line)
+		if li.skip {
+			continue
+		}
+		if li.indent > 0 && !strings.HasPrefix(line, "\t") {
+			indentLevels = append(indentLevels, li.indent)
+		}
+		if li.isItem {
+			info.KeyIndents[li.path+"[]"] = li.indent
+			if lastKey != nil && lastKey.keyPath == li.path && lastKey.indent == li.indent {
+				info.ZeroIndentArrays[li.path] = true
+			}
+		}
+		if li.key != "" {
+			keyIndent := li.indent
+			if li.isItem {
+				keyIndent += 2
+			}
+			info.KeyIndents[li.keyPath] = keyIndent
+			cp := li
+			lastKey = &cp
+		} else {
+			lastKey = nil
+		}
+	}
+	return indentLevels
 }

@@ -75,9 +75,12 @@ app:
 - **Performance Optimizations** - 14-25% speed improvement with advanced caching
 - **Memory Efficiency** - Reduced memory allocations and improved buffer management
 
-### ⚠️ **Minor Limitations** (Edge cases - 2 tests disabled):
-- **Zero-indent arrays**: Kubernetes style `containers:\n- item` (architectural limitation)
-- **GitHub Actions style**: Similar zero-indent requirement
+- **Zero-indent arrays** (kubectl / GitHub Actions style `containers:\n- name: web`) preserved
+- **Anchors and merge keys** (`<<: *defaults`) preserved, e.g. docker-compose `x-*` extensions
+- **Multi-document streams** (`---`) via `LoadAll` / `DocumentsToBytes`
+
+### ⚠️ **Known Limitations**:
+- Formatting hints for keys with the same name at different paths (e.g. two `branches:` flow arrays with different spacing) may bleed into each other
 
 **📋 See [FORMATTING_SUPPORT.md](FORMATTING_SUPPORT.md) for detailed compatibility matrix.**
 
@@ -373,8 +376,10 @@ schema := `{
 }`
 
 // Validate document
-schemaDoc, _ := yamler.LoadSchema(schema)
-isValid, errors := doc.Validate(schemaDoc)
+rule, _ := yamler.LoadSchemaFromString(schema)
+if err := doc.Validate(rule); err != nil {
+    log.Println("invalid:", err)
+}
 ```
 
 ## 🎨 Comment Alignment Features
@@ -439,8 +444,10 @@ if err != nil {
 ### Document Loading
 - `LoadFile(filename)` - Load from file
 - `LoadBytes([]byte)` - Load from byte slice  
-- `Load(string)` - Load from string
-- `LoadSchema(string)` - Load JSON schema for validation
+- `Load(string)` - Load from string (a single document; multi-document input is rejected)
+- `LoadAll(string)`, `LoadAllBytes([]byte)`, `LoadAllFile(filename)` - Load every document of a `---`-separated stream
+- `DocumentsToBytes([]*Document)`, `SaveAll(filename, docs)` - Serialize a multi-document stream
+- `LoadSchemaFromString(string)`, `LoadSchemaFromFile(filename)` - Load a validation schema
 
 ### Basic Operations
 - `Get(path)` - Get value as interface{}
