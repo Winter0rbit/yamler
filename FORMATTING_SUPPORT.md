@@ -1,6 +1,6 @@
 # YAML Formatting Support in Yamler
 
-This document describes which formatting features Yamler preserves when a document is modified and written back, based on the current test suite (`go test ./...`, 93 top-level tests with ~290 sub-cases, all passing).
+This document describes which formatting features Yamler preserves when a document is modified and written back, based on the current test suite: unit tests, a round-trip corpus of real-world files under `testdata/roundtrip/` that must survive `Load` → `ToBytes` byte for byte, and a fuzz test (`go test -fuzz FuzzRoundTrip`) checking that data is never changed.
 
 ## How preservation works
 
@@ -35,30 +35,29 @@ Yamler parses the document with `gopkg.in/yaml.v3`, keeps the original text next
 
 ### Comments
 - Head, foot and inline comments are never lost
-- Inline comment spacing after `key: value` is preserved (relative mode), or all inline comments can be aligned to a column (`SetAbsoluteCommentAlignment`), or removed (`DisableCommentAlignment`)
+- Inline comment spacing is preserved for `key: value`, bare `key:` and list-item lines (relative mode), or all inline comments can be aligned to a column (`SetAbsoluteCommentAlignment`), or removed (`DisableCommentAlignment`)
+- Standalone comment lines keep their indentation
 
 ### Real-world formats covered by tests
 Docker Compose, Kubernetes manifests (single and multi-document), Ansible playbooks, GitHub Actions workflows, generic application configuration files.
 
 ## ⚠️ Partially Supported
 
-### Formatting hints keyed by key name
-Blank-line patterns, flow-array/flow-object styles and inline comment spacing are currently recorded per **key name**, not per full path. Two keys with the same name but different styles can influence each other:
+### Lists whose items are laid out differently
+All items of a list share one formatting record (paths do not include indices), so the layout of the first item is applied to the others:
 ```yaml
-on:
-  push:
-    branches: [main, develop]   # spaced
-  pull_request:
-    branches: [main]            # the later definition wins for both
+- name: a
+  image: x
+-   name: b        # extra spaces after the dash are not kept
+    image: y
 ```
-Indentation is already recorded per path and is not affected.
 
-### Comments after bare keys and list items
+### Flow collections containing comments
 ```yaml
-pools:            # kept, but re-spaced to "pools: # ..."
-  - name: primary # kept, but re-spaced
+ports: [80,   # http
+        443]  # https
 ```
-Comments following `key: value` pairs keep their spacing.
+Such values are re-formatted by the encoder (comments are kept).
 
 ### Newly created structures
 Arrays and mappings created by `Set`/`AppendToArray` use two-space block style. Map values given as `map[string]interface{}` are written with their keys sorted.
@@ -77,7 +76,7 @@ The YAML specification forbids tabs for indentation and `yaml.v3` rejects such i
 ## 🚀 Recommendations
 
 1. Use `LoadAll` for Kubernetes-style multi-document files.
-2. When a document mixes styles for same-named keys, check the output for that key; keying hints by full path is on the roadmap.
+2. Add your own configuration files to a round-trip test (see `roundtrip_test.go`) to lock in their layout.
 3. Prefer one `Save` after a batch of modifications: every mutation re-serializes the document internally.
 4. Run your own configuration files through the test in `examples/` (or a quick round-trip test) before relying on the library in production.
 

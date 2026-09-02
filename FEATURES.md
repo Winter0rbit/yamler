@@ -477,8 +477,8 @@ Errors are prefixed with the path that caused them, e.g. `path app.port: invalid
 | **Spaced flow arrays** | ✅ Perfect | `[ 1 , 2 , 3 ]` style |
 | **Block arrays** | ✅ Perfect | Multi-line arrays |
 | **Multiline flow** | ✅ Perfect | Complex nested structures |
-| **Comments** | ✅ Preserved | Spacing kept for `key: value  # comment`; comments after bare keys or list items are re-spaced |
-| **Empty lines** | ⚠️ Mostly | Keyed by key name, so same-named keys share a blank-line pattern |
+| **Comments** | ✅ Preserved | Inline spacing and standalone comment indentation kept |
+| **Empty lines** | ✅ Perfect | Keyed by path |
 | **Zero-indent lists** | ✅ Perfect | `containers:\n- name: web` |
 | **Anchors / merge keys** | ✅ Perfect | `&a`, `*a`, `<<: *a` |
 | **Multi-document streams** | ✅ Perfect | via `LoadAll` / `SaveAll` |
@@ -544,7 +544,7 @@ Errors are prefixed with the path that caused them, e.g. `path app.port: invalid
 - **Incremental parsing** for partial updates
 
 ### Format Support
-- **Path-keyed formatting hints** (blank lines, flow styles and comment spacing keyed by full path instead of key name)
+- **Per-item layout records** for lists whose items are laid out differently
 - **Custom comment styles** (configurable formatting)
 - **YAML 1.2 features** (additional specification support)
 
