@@ -1,7 +1,9 @@
-module advanced_performance
+module yamler-example-advanced_performance
 
-go 1.19
+go 1.21
 
 require github.com/Winter0rbit/yamler v0.0.0
 
-replace github.com/Winter0rbit/yamler => ../../ 
+require gopkg.in/yaml.v3 v3.0.1 // indirect
+
+replace github.com/Winter0rbit/yamler => ../..
