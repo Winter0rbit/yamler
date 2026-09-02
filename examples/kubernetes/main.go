@@ -57,11 +57,13 @@ spec:
 	fmt.Println("=== Original Kubernetes Manifest ===")
 	fmt.Println(k8sDeployment)
 
-	// Load the Kubernetes manifest
-	doc, err := yamler.Load(k8sDeployment)
+	// Load the Kubernetes manifest: it is a multi-document stream
+	// (Deployment + Service), so use LoadAll
+	docs, err := yamler.LoadAll(k8sDeployment)
 	if err != nil {
 		log.Fatal("Failed to load Kubernetes manifest:", err)
 	}
+	doc := docs[0] // the Deployment
 
 	// Scale the deployment
 	fmt.Println("\n=== Scaling Deployment ===")
@@ -150,11 +152,14 @@ spec:
 		}
 	}
 
-	// Display final manifest
+	// Also touch the Service document
+	docs[1].Set("spec.type", "NodePort")
+
+	// Display final manifest with both documents
 	fmt.Println("\n=== Updated Kubernetes Manifest ===")
-	result, err := doc.String()
+	result, err := yamler.DocumentsToBytes(docs)
 	if err != nil {
 		log.Fatal("Failed to convert to string:", err)
 	}
-	fmt.Println(result)
+	fmt.Print(string(result))
 }
