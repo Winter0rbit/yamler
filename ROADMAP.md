@@ -18,6 +18,7 @@
 - ✅ Benchmarks for load, serialize, get, set, wildcards and arrays (`benchmark_test.go`)
 - ✅ Formatting-info and path caches, pooled buffers
 - ✅ CI: tests with `-race`, `gofmt`, `go vet`, `goimports`
+- ✅ `Has` / `Keys` / `Copy` / `Delete` / `DeleteAll`; sentinel errors for `errors.Is`
 
 ## 🎯 Priorities
 
@@ -28,8 +29,6 @@
 - [ ] Grow the round-trip corpus (Helm charts, Compose v2 profiles, OpenAPI specs)
 
 ### Phase 2: API completeness
-- [ ] `Has(path)` / `Delete(path)` / `Keys(path)` / `Copy()`
-- [ ] Typed error values (`ErrNotFound`, `ErrType`, `ErrIndex`) usable with `errors.Is`
 - [ ] Array slices in paths (`items[1:3]`)
 - [ ] Keep insertion position for new keys (e.g. insert after a given key)
 

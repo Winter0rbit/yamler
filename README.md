@@ -231,6 +231,12 @@ doc.Set("database", map[string]interface{}{
 // Anything
 value, err := doc.Get("app.database")   // interface{}
 doc.Set("app.database.host", "db.local")
+
+// Structure
+exists := doc.Has("app.database.port")
+keys, err := doc.Keys("app")            // ["name", "debug", "servers"] in document order
+err = doc.Delete("app.debug")           // remove a key (or an element: "app.servers[1]")
+clone := doc.Copy()                     // independent deep copy, formatting included
 ```
 
 Paths use dots for keys and `[i]` for array indices: `services.web.ports[0]`. `Set` creates missing intermediate mappings. Keys of new map values are written in sorted order.
@@ -278,6 +284,10 @@ envNames, _ := doc.GetAll("**.env[*].name")       // any index
 // Bulk updates (existing paths only; SetAll does not create keys)
 doc.SetAll("**.debug", false)
 doc.SetAll("services.*.replicas", 3)
+
+// Bulk deletes
+removed, _ := doc.DeleteAll("**.debug")          // number of removed entries
+removed, _ = doc.DeleteAll("services.*.env[*]")  // empties every env list
 
 // Matching paths without values
 keys, _ := doc.GetKeys("apps.*")     // ["apps.web", "apps.api"]
@@ -358,14 +368,20 @@ debug: true         # Debug flag
 
 ## 🔧 Error Handling
 
-Every operation returns an error with the path that caused it:
+Every operation returns an error with the path that caused it, and every error wraps one of the sentinel values so it can be classified with `errors.Is`:
 
 ```go
-doc, err := yamler.LoadFile("config.yaml") // file or parse errors
-value, err := doc.GetString("app.name")    // "path app.name: key app not found"
-port, err := doc.GetInt("app.name")        // "path app.name: invalid integer value: ..."
-err = doc.Set("items[abc]", 1)             // "path items[abc]: invalid array index: abc"
+doc, err := yamler.LoadFile("config.yaml") // ErrIO, ErrParse or ErrMultiDocument
+value, err := doc.GetString("app.name")    // "path app.name: key app not found" -> ErrNotFound
+port, err := doc.GetInt("app.name")        // "path app.name: invalid integer value: ..." -> ErrType
+err = doc.Set("items[abc]", 1)             // "path items[abc]: invalid array index: abc" -> ErrPath
+
+if _, err := doc.GetString("optional.key"); errors.Is(err, yamler.ErrNotFound) {
+    // use a default
+}
 ```
+
+Sentinels: `ErrNotFound`, `ErrType`, `ErrIndex`, `ErrPath`, `ErrRoot`, `ErrParse`, `ErrIO`, `ErrMultiDocument`, `ErrValidation`, `ErrUnsupported`. Underlying `os` and `yaml.v3` errors remain reachable through `errors.Is` / `errors.As`.
 
 ## ⚡ Performance
 
@@ -397,7 +413,9 @@ See [FORMATTING_SUPPORT.md](FORMATTING_SUPPORT.md) for the detailed compatibilit
 - `DocumentsToBytes(docs)`, `SaveAll(filename, docs)` - serialize a stream
 
 ### Basic Operations
-- `Get(path)`, `Set(path, value)`
+- `Get(path)`, `Set(path, value)`, `Has(path)`, `Delete(path)`
+- `Keys(path)` - keys of a mapping in document order
+- `Copy()` - deep copy with formatting
 
 ### Typed Getters
 - `GetString`, `GetInt` (int64), `GetFloat`, `GetBool`
@@ -416,7 +434,7 @@ See [FORMATTING_SUPPORT.md](FORMATTING_SUPPORT.md) for the detailed compatibilit
 - `GetArrayDocumentElement(index, path)`, `SetArrayElement(index, path, value)`, `AddArrayElement(value)`
 
 ### Wildcards
-- `GetAll(pattern)`, `SetAll(pattern, value)`, `GetKeys(pattern)`, `GetPathsRecursive()`
+- `GetAll(pattern)`, `SetAll(pattern, value)`, `DeleteAll(pattern)`, `GetKeys(pattern)`, `GetPathsRecursive()`
 - `FilterByPattern(map, pattern)` - filter a `GetAll` result further
 
 ### Merging and Validation
