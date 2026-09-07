@@ -1,7 +1,6 @@
 package yamler
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -46,30 +45,33 @@ func navigateToArrayElement(node *yaml.Node, part, fullPath string) (*yaml.Node,
 	// Extract array name and index
 	idx := strings.LastIndex(part, "[")
 	if idx == -1 {
-		return nil, fmt.Errorf("path %s: invalid array index format", fullPath)
+		return nil, wrapErr(ErrPath, "path %s: invalid array index format", fullPath)
 	}
 	arrayName := part[:idx]
 	indexStr := part[idx+1 : len(part)-1]
 	index, err := strconv.Atoi(indexStr)
 	if err != nil {
-		return nil, fmt.Errorf("path %s: invalid array index: %s", fullPath, indexStr)
+		return nil, wrapErr(ErrPath, "path %s: invalid array index: %s", fullPath, indexStr)
 	}
 
-	// Get array node
-	if node.Kind != yaml.MappingNode {
-		return nil, fmt.Errorf("path %s: expected mapping node", fullPath)
-	}
-
-	arrayNode, found := findKeyInMapping(node, arrayName)
-	if !found {
-		return nil, fmt.Errorf("path %s: key %s not found", fullPath, arrayName)
+	// Get array node: "[i]" without a name indexes the node itself
+	arrayNode := node
+	if arrayName != "" {
+		if node.Kind != yaml.MappingNode {
+			return nil, wrapErr(ErrType, "path %s: expected mapping node", fullPath)
+		}
+		var found bool
+		arrayNode, found = findKeyInMapping(node, arrayName)
+		if !found {
+			return nil, wrapErr(ErrNotFound, "path %s: key %s not found", fullPath, arrayName)
+		}
 	}
 
 	if arrayNode.Kind != yaml.SequenceNode {
-		return nil, fmt.Errorf("path %s: expected sequence node", fullPath)
+		return nil, wrapErr(ErrType, "path %s: expected sequence node", fullPath)
 	}
 	if index < 0 || index >= len(arrayNode.Content) {
-		return nil, fmt.Errorf("path %s: array index out of bounds", fullPath)
+		return nil, wrapErr(ErrIndex, "path %s: array index out of bounds", fullPath)
 	}
 
 	return arrayNode.Content[index], nil
@@ -78,12 +80,12 @@ func navigateToArrayElement(node *yaml.Node, part, fullPath string) (*yaml.Node,
 // navigateToMapKey navigates to a map key
 func navigateToMapKey(node *yaml.Node, part, fullPath string) (*yaml.Node, error) {
 	if node.Kind != yaml.MappingNode {
-		return nil, fmt.Errorf("path %s: expected mapping node", fullPath)
+		return nil, wrapErr(ErrType, "path %s: expected mapping node", fullPath)
 	}
 
 	foundNode, found := findKeyInMapping(node, part)
 	if !found {
-		return nil, fmt.Errorf("path %s: key %s not found", fullPath, part)
+		return nil, wrapErr(ErrNotFound, "path %s: key %s not found", fullPath, part)
 	}
 
 	return foundNode, nil
@@ -108,7 +110,7 @@ func (d *Document) GetString(path string) (string, error) {
 
 	str, ok := value.(string)
 	if !ok {
-		return "", fmt.Errorf("path %s: expected string, got %T", path, value)
+		return "", wrapErr(ErrType, "path %s: expected string, got %T", path, value)
 	}
 
 	return str, nil
@@ -127,11 +129,11 @@ func (d *Document) GetInt(path string) (int64, error) {
 	case string:
 		i, err := strconv.ParseInt(v, 10, 64)
 		if err != nil {
-			return 0, fmt.Errorf("path %s: invalid integer value: %v", path, err)
+			return 0, wrapErr(ErrType, "path %s: invalid integer value: %v", path, err)
 		}
 		return i, nil
 	default:
-		return 0, fmt.Errorf("path %s: expected integer, got %T", path, value)
+		return 0, wrapErr(ErrType, "path %s: expected integer, got %T", path, value)
 	}
 }
 
@@ -150,11 +152,11 @@ func (d *Document) GetFloat(path string) (float64, error) {
 	case string:
 		f, err := strconv.ParseFloat(v, 64)
 		if err != nil {
-			return 0, fmt.Errorf("path %s: invalid float value: %v", path, err)
+			return 0, wrapErr(ErrType, "path %s: invalid float value: %v", path, err)
 		}
 		return f, nil
 	default:
-		return 0, fmt.Errorf("path %s: expected float, got %T", path, value)
+		return 0, wrapErr(ErrType, "path %s: expected float, got %T", path, value)
 	}
 }
 
@@ -168,7 +170,7 @@ func (d *Document) GetBool(path string) (bool, error) {
 	if b, ok := toBool(value); ok {
 		return b, nil
 	}
-	return false, fmt.Errorf("path %s: invalid boolean value: %v", path, value)
+	return false, wrapErr(ErrType, "path %s: invalid boolean value: %v", path, value)
 }
 
 // toBool converts the loose boolean forms accepted by the library:
@@ -200,7 +202,7 @@ func (d *Document) GetSlice(path string) ([]interface{}, error) {
 
 	slice, ok := value.([]interface{})
 	if !ok {
-		return nil, fmt.Errorf("path %s: expected slice, got %T", path, value)
+		return nil, wrapErr(ErrType, "path %s: expected slice, got %T", path, value)
 	}
 
 	return slice, nil
@@ -215,7 +217,7 @@ func (d *Document) GetMap(path string) (map[string]interface{}, error) {
 
 	m, ok := value.(map[string]interface{})
 	if !ok {
-		return nil, fmt.Errorf("path %s: expected map, got %T", path, value)
+		return nil, wrapErr(ErrType, "path %s: expected map, got %T", path, value)
 	}
 
 	return m, nil
@@ -232,7 +234,7 @@ func (d *Document) GetStringSlice(path string) ([]string, error) {
 	for i, v := range slice {
 		str, ok := v.(string)
 		if !ok {
-			return nil, fmt.Errorf("path %s: element %d is not a string", path, i)
+			return nil, wrapErr(ErrType, "path %s: element %d is not a string", path, i)
 		}
 		result[i] = str
 	}
@@ -255,11 +257,11 @@ func (d *Document) GetIntSlice(path string) ([]int64, error) {
 		case string:
 			n, err := strconv.ParseInt(val, 10, 64)
 			if err != nil {
-				return nil, fmt.Errorf("path %s: element %d is not a valid integer", path, i)
+				return nil, wrapErr(ErrType, "path %s: element %d is not a valid integer", path, i)
 			}
 			result[i] = n
 		default:
-			return nil, fmt.Errorf("path %s: element %d is not an integer", path, i)
+			return nil, wrapErr(ErrType, "path %s: element %d is not an integer", path, i)
 		}
 	}
 
@@ -283,11 +285,11 @@ func (d *Document) GetFloatSlice(path string) ([]float64, error) {
 		case string:
 			n, err := strconv.ParseFloat(val, 64)
 			if err != nil {
-				return nil, fmt.Errorf("path %s: element %d is not a valid float", path, i)
+				return nil, wrapErr(ErrType, "path %s: element %d is not a valid float", path, i)
 			}
 			result[i] = n
 		default:
-			return nil, fmt.Errorf("path %s: element %d is not a float", path, i)
+			return nil, wrapErr(ErrType, "path %s: element %d is not a float", path, i)
 		}
 	}
 
@@ -305,7 +307,7 @@ func (d *Document) GetBoolSlice(path string) ([]bool, error) {
 	for i, v := range slice {
 		b, ok := toBool(v)
 		if !ok {
-			return nil, fmt.Errorf("path %s: element %d is not a valid boolean", path, i)
+			return nil, wrapErr(ErrType, "path %s: element %d is not a valid boolean", path, i)
 		}
 		result[i] = b
 	}
@@ -324,7 +326,7 @@ func (d *Document) GetMapSlice(path string) ([]map[string]interface{}, error) {
 	for i, v := range slice {
 		m, ok := v.(map[string]interface{})
 		if !ok {
-			return nil, fmt.Errorf("path %s: element %d is not a map", path, i)
+			return nil, wrapErr(ErrType, "path %s: element %d is not a map", path, i)
 		}
 		result[i] = m
 	}
@@ -344,18 +346,18 @@ func (d *Document) getFromArrayRoot(path string) (interface{}, error) {
 		return nodeToInterface(root)
 	}
 	if !strings.HasPrefix(path, "[") {
-		return nil, fmt.Errorf("path %s: document root is an array, path must start with an index like [0]", path)
+		return nil, wrapErr(ErrPath, "path %s: document root is an array, path must start with an index like [0]", path)
 	}
 	end := strings.Index(path, "]")
 	if end < 0 {
-		return nil, fmt.Errorf("path %s: invalid array index format", path)
+		return nil, wrapErr(ErrPath, "path %s: invalid array index format", path)
 	}
 	index, err := strconv.Atoi(path[1:end])
 	if err != nil {
-		return nil, fmt.Errorf("path %s: invalid array index: %s", path, path[1:end])
+		return nil, wrapErr(ErrPath, "path %s: invalid array index: %s", path, path[1:end])
 	}
 	if index < 0 || index >= len(root.Content) {
-		return nil, fmt.Errorf("path %s: array index out of bounds", path)
+		return nil, wrapErr(ErrIndex, "path %s: array index out of bounds", path)
 	}
 	node := root.Content[index]
 	rest := strings.TrimPrefix(path[end+1:], ".")

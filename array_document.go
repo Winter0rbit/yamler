@@ -3,8 +3,6 @@
 package yamler
 
 import (
-	"fmt"
-
 	"gopkg.in/yaml.v3"
 )
 
@@ -19,11 +17,11 @@ func (d *Document) isArrayRoot() bool {
 // arrayRoot returns the root SequenceNode of the document for array documents
 func (d *Document) sequenceRoot() (*yaml.Node, error) {
 	if d.root == nil || len(d.root.Content) == 0 {
-		return nil, fmt.Errorf("empty document root")
+		return nil, wrapErr(ErrRoot, "empty document root")
 	}
 	root := d.root.Content[0]
 	if root.Kind != yaml.SequenceNode {
-		return nil, fmt.Errorf("root is not a sequence node")
+		return nil, wrapErr(ErrRoot, "root is not a sequence node")
 	}
 	return root, nil
 }
@@ -31,7 +29,7 @@ func (d *Document) sequenceRoot() (*yaml.Node, error) {
 // SetArrayElement sets a value in an array document at the specified index and path
 func (d *Document) SetArrayElement(index int, path string, value interface{}) error {
 	if !d.isArrayRoot() {
-		return fmt.Errorf("document root is not an array")
+		return wrapErr(ErrRoot, "document root is not an array")
 	}
 
 	root, err := d.sequenceRoot()
@@ -40,7 +38,7 @@ func (d *Document) SetArrayElement(index int, path string, value interface{}) er
 	}
 
 	if index < 0 || index >= len(root.Content) {
-		return fmt.Errorf("array index %d out of bounds (length: %d)", index, len(root.Content))
+		return wrapErr(ErrIndex, "array index %d out of bounds (length: %d)", index, len(root.Content))
 	}
 
 	element := root.Content[index]
@@ -56,7 +54,7 @@ func (d *Document) SetArrayElement(index int, path string, value interface{}) er
 
 	// Set value in the element (assuming it's a mapping)
 	if element.Kind != yaml.MappingNode {
-		return fmt.Errorf("array element at index %d is not a mapping", index)
+		return wrapErr(ErrType, "array element at index %d is not a mapping", index)
 	}
 
 	return d.setValueInNode(element, path, value)
@@ -65,7 +63,7 @@ func (d *Document) SetArrayElement(index int, path string, value interface{}) er
 // GetArrayDocumentElement gets a value from an array document at the specified index and path
 func (d *Document) GetArrayDocumentElement(index int, path string) (interface{}, error) {
 	if !d.isArrayRoot() {
-		return nil, fmt.Errorf("document root is not an array")
+		return nil, wrapErr(ErrRoot, "document root is not an array")
 	}
 
 	root, err := d.sequenceRoot()
@@ -74,7 +72,7 @@ func (d *Document) GetArrayDocumentElement(index int, path string) (interface{},
 	}
 
 	if index < 0 || index >= len(root.Content) {
-		return nil, fmt.Errorf("array index %d out of bounds (length: %d)", index, len(root.Content))
+		return nil, wrapErr(ErrIndex, "array index %d out of bounds (length: %d)", index, len(root.Content))
 	}
 
 	element := root.Content[index]
@@ -90,7 +88,7 @@ func (d *Document) GetArrayDocumentElement(index int, path string) (interface{},
 // AddArrayElement adds a new element to an array document
 func (d *Document) AddArrayElement(value interface{}) error {
 	if !d.isArrayRoot() {
-		return fmt.Errorf("document root is not an array")
+		return wrapErr(ErrRoot, "document root is not an array")
 	}
 
 	root, err := d.sequenceRoot()
@@ -130,7 +128,7 @@ func (d *Document) setValueInNode(node *yaml.Node, path string, value interface{
 		}
 
 		if !found {
-			return fmt.Errorf("path not found: %s", path)
+			return wrapErr(ErrNotFound, "path not found: %s", path)
 		}
 	}
 
@@ -144,7 +142,7 @@ func (d *Document) getValueFromNode(node *yaml.Node, path string) (interface{}, 
 
 	for _, part := range parts {
 		if current.Kind != yaml.MappingNode {
-			return nil, fmt.Errorf("cannot navigate path in non-mapping node")
+			return nil, wrapErr(ErrType, "cannot navigate path in non-mapping node")
 		}
 
 		// Find the key
@@ -158,7 +156,7 @@ func (d *Document) getValueFromNode(node *yaml.Node, path string) (interface{}, 
 		}
 
 		if !found {
-			return nil, fmt.Errorf("key not found: %s", part)
+			return nil, wrapErr(ErrNotFound, "key not found: %s", part)
 		}
 	}
 
@@ -168,7 +166,7 @@ func (d *Document) getValueFromNode(node *yaml.Node, path string) (interface{}, 
 // setDirectValue sets a direct value in a mapping node
 func (d *Document) setDirectValue(node *yaml.Node, key string, value interface{}) error {
 	if node.Kind != yaml.MappingNode {
-		return fmt.Errorf("cannot set value in non-mapping node")
+		return wrapErr(ErrType, "cannot set value in non-mapping node")
 	}
 
 	// Find existing key

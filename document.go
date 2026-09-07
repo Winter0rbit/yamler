@@ -10,7 +10,6 @@ package yamler
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -73,11 +72,11 @@ type Document struct {
 // mappingRoot returns the root MappingNode of the document
 func (d *Document) mappingRoot() (*yaml.Node, error) {
 	if d.root == nil || len(d.root.Content) == 0 {
-		return nil, fmt.Errorf("empty document root")
+		return nil, wrapErr(ErrRoot, "empty document root")
 	}
 	root := d.root.Content[0]
 	if root.Kind != yaml.MappingNode {
-		return nil, fmt.Errorf("root is not a mapping node")
+		return nil, wrapErr(ErrType, "root is not a mapping node")
 	}
 	return root, nil
 }
@@ -86,7 +85,7 @@ func (d *Document) mappingRoot() (*yaml.Node, error) {
 func LoadFile(filename string) (*Document, error) {
 	content, err := os.ReadFile(filename)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read file: %w", err)
+		return nil, wrapCause(ErrIO, err, "failed to read file: %v", err)
 	}
 
 	return LoadBytes(content)
@@ -136,16 +135,16 @@ func Load(content string) (*Document, error) {
 	if strings.Contains(content, "---") {
 		n, err := countDocuments(content)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse YAML: %w", err)
+			return nil, wrapCause(ErrParse, err, "failed to parse YAML: %v", err)
 		}
 		if n > 1 {
-			return nil, fmt.Errorf("content contains %d YAML documents; use LoadAll to load a multi-document stream", n)
+			return nil, wrapErr(ErrMultiDocument, "content contains %d YAML documents; use LoadAll to load a multi-document stream", n)
 		}
 	}
 
 	var node yaml.Node
 	if err := yaml.Unmarshal([]byte(content), &node); err != nil {
-		return nil, fmt.Errorf("failed to parse YAML: %w", err)
+		return nil, wrapCause(ErrParse, err, "failed to parse YAML: %v", err)
 	}
 
 	doc := &Document{

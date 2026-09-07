@@ -1,7 +1,6 @@
 package yamler
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -18,7 +17,7 @@ func (d *Document) Set(path string, value interface{}) error {
 				return err
 			}
 			if d.root == nil || len(d.root.Content) == 0 {
-				return fmt.Errorf("empty document root")
+				return wrapErr(ErrRoot, "empty document root")
 			}
 			d.root.Content[0] = valueNode
 			content, err := d.ToBytes()
@@ -99,14 +98,14 @@ func (d *Document) Set(path string, value interface{}) error {
 			return err
 		}
 		if idx < 0 || idx >= len(parent.Content) {
-			return fmt.Errorf("array index out of bounds: %d", idx)
+			return wrapErr(ErrIndex, "array index out of bounds: %d", idx)
 		}
 		valueNode.HeadComment = parent.Content[idx].HeadComment
 		valueNode.LineComment = parent.Content[idx].LineComment
 		valueNode.FootComment = parent.Content[idx].FootComment
 		parent.Content[idx] = valueNode
 	} else {
-		return fmt.Errorf("parent node is not mapping or sequence")
+		return wrapErr(ErrType, "parent node is not mapping or sequence")
 	}
 
 	content, err := d.ToBytes()
@@ -186,10 +185,10 @@ func parseArrayIndex(part string) (int, error) {
 	indexStr := part[1 : len(part)-1]
 	index, err := strconv.Atoi(indexStr)
 	if err != nil {
-		return 0, fmt.Errorf("invalid array index: %s", part)
+		return 0, wrapErr(ErrPath, "invalid array index: %s", part)
 	}
 	if index < 0 {
-		return 0, fmt.Errorf("negative array index: %d", index)
+		return 0, wrapErr(ErrPath, "negative array index: %d", index)
 	}
 	return index, nil
 }

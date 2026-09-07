@@ -16,7 +16,7 @@ import (
 func LoadSchemaFromString(content string) (*ValidationRule, error) {
 	var schema ValidationRule
 	if err := yaml.Unmarshal([]byte(content), &schema); err != nil {
-		return nil, fmt.Errorf("failed to parse schema: %v", err)
+		return nil, wrapCause(ErrParse, err, "failed to parse schema: %v", err)
 	}
 	return &schema, nil
 }
@@ -25,7 +25,7 @@ func LoadSchemaFromString(content string) (*ValidationRule, error) {
 func LoadSchemaFromFile(filename string) (*ValidationRule, error) {
 	content, err := ioutil.ReadFile(filename)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read schema file: %v", err)
+		return nil, wrapCause(ErrIO, err, "failed to read schema file: %v", err)
 	}
 	return LoadSchemaFromString(string(content))
 }
@@ -33,7 +33,7 @@ func LoadSchemaFromFile(filename string) (*ValidationRule, error) {
 // Validate validates the YAML document against a schema
 func (d *Document) Validate(schema *ValidationRule) error {
 	if schema == nil {
-		return fmt.Errorf("schema is nil")
+		return wrapErr(ErrValidation, "schema is nil")
 	}
 
 	return validateNode(d.root.Content[0], schema, "")
@@ -61,33 +61,33 @@ func validateNode(node *yaml.Node, schema *ValidationRule, path string) error {
 	case TypeAny:
 		return nil
 	default:
-		return fmt.Errorf("path %s: unsupported type: %s", path, schema.Type)
+		return wrapErr(ErrUnsupported, "path %s: unsupported type: %s", path, schema.Type)
 	}
 }
 
 // validateString validates a string value
 func validateString(node *yaml.Node, schema *ValidationRule, path string) error {
 	if node.Kind != yaml.ScalarNode || node.Tag != "!!str" {
-		return fmt.Errorf("path %s: expected string, got %s", path, node.Tag)
+		return wrapErr(ErrValidation, "path %s: expected string, got %s", path, node.Tag)
 	}
 
 	value := node.Value
 
 	if schema.MinLength != nil && len(value) < *schema.MinLength {
-		return fmt.Errorf("path %s: string length %d is less than minimum %d", path, len(value), *schema.MinLength)
+		return wrapErr(ErrValidation, "path %s: string length %d is less than minimum %d", path, len(value), *schema.MinLength)
 	}
 
 	if schema.MaxLength != nil && len(value) > *schema.MaxLength {
-		return fmt.Errorf("path %s: string length %d is greater than maximum %d", path, len(value), *schema.MaxLength)
+		return wrapErr(ErrValidation, "path %s: string length %d is greater than maximum %d", path, len(value), *schema.MaxLength)
 	}
 
 	if schema.Pattern != nil {
 		re, err := regexp.Compile(*schema.Pattern)
 		if err != nil {
-			return fmt.Errorf("path %s: invalid pattern: %v", path, err)
+			return wrapErr(ErrValidation, "path %s: invalid pattern: %v", path, err)
 		}
 		if !re.MatchString(value) {
-			return fmt.Errorf("path %s: string does not match pattern %s", path, *schema.Pattern)
+			return wrapErr(ErrValidation, "path %s: string does not match pattern %s", path, *schema.Pattern)
 		}
 	}
 
@@ -100,7 +100,7 @@ func validateString(node *yaml.Node, schema *ValidationRule, path string) error 
 			}
 		}
 		if !valid {
-			return fmt.Errorf("path %s: value %s is not in enum", path, value)
+			return wrapErr(ErrValidation, "path %s: value %s is not in enum", path, value)
 		}
 	}
 
@@ -110,12 +110,12 @@ func validateString(node *yaml.Node, schema *ValidationRule, path string) error 
 // validateInt validates an integer value
 func validateInt(node *yaml.Node, schema *ValidationRule, path string) error {
 	if node.Kind != yaml.ScalarNode || node.Tag != "!!int" {
-		return fmt.Errorf("path %s: expected integer, got %s", path, node.Tag)
+		return wrapErr(ErrValidation, "path %s: expected integer, got %s", path, node.Tag)
 	}
 
 	value, err := strconv.ParseInt(node.Value, 10, 64)
 	if err != nil {
-		return fmt.Errorf("path %s: invalid integer: %v", path, err)
+		return wrapErr(ErrValidation, "path %s: invalid integer: %v", path, err)
 	}
 
 	return validateNumericConstraints(float64(value), schema, path, "integer")
@@ -124,12 +124,12 @@ func validateInt(node *yaml.Node, schema *ValidationRule, path string) error {
 // validateFloat validates a float value
 func validateFloat(node *yaml.Node, schema *ValidationRule, path string) error {
 	if node.Kind != yaml.ScalarNode || (node.Tag != "!!float" && node.Tag != "!!int") {
-		return fmt.Errorf("path %s: expected float, got %s", path, node.Tag)
+		return wrapErr(ErrValidation, "path %s: expected float, got %s", path, node.Tag)
 	}
 
 	value, err := strconv.ParseFloat(node.Value, 64)
 	if err != nil {
-		return fmt.Errorf("path %s: invalid float: %v", path, err)
+		return wrapErr(ErrValidation, "path %s: invalid float: %v", path, err)
 	}
 
 	return validateNumericConstraints(value, schema, path, "float")
@@ -152,16 +152,16 @@ func validateNumericConstraints(value float64, schema *ValidationRule, path, val
 func validateMinimumConstraints(value float64, schema *ValidationRule, path, valueType string) error {
 	if schema.Minimum != nil && value < *schema.Minimum {
 		if valueType == "integer" {
-			return fmt.Errorf("path %s: value %d is less than minimum %f", path, int64(value), *schema.Minimum)
+			return wrapErr(ErrValidation, "path %s: value %d is less than minimum %f", path, int64(value), *schema.Minimum)
 		}
-		return fmt.Errorf("path %s: value %f is less than minimum %f", path, value, *schema.Minimum)
+		return wrapErr(ErrValidation, "path %s: value %f is less than minimum %f", path, value, *schema.Minimum)
 	}
 
 	if schema.ExclusiveMinimum != nil && value <= *schema.ExclusiveMinimum {
 		if valueType == "integer" {
-			return fmt.Errorf("path %s: value %d is not greater than exclusive minimum %f", path, int64(value), *schema.ExclusiveMinimum)
+			return wrapErr(ErrValidation, "path %s: value %d is not greater than exclusive minimum %f", path, int64(value), *schema.ExclusiveMinimum)
 		}
-		return fmt.Errorf("path %s: value %f is not greater than exclusive minimum %f", path, value, *schema.ExclusiveMinimum)
+		return wrapErr(ErrValidation, "path %s: value %f is not greater than exclusive minimum %f", path, value, *schema.ExclusiveMinimum)
 	}
 
 	return nil
@@ -171,16 +171,16 @@ func validateMinimumConstraints(value float64, schema *ValidationRule, path, val
 func validateMaximumConstraints(value float64, schema *ValidationRule, path, valueType string) error {
 	if schema.Maximum != nil && value > *schema.Maximum {
 		if valueType == "integer" {
-			return fmt.Errorf("path %s: value %d is greater than maximum %f", path, int64(value), *schema.Maximum)
+			return wrapErr(ErrValidation, "path %s: value %d is greater than maximum %f", path, int64(value), *schema.Maximum)
 		}
-		return fmt.Errorf("path %s: value %f is greater than maximum %f", path, value, *schema.Maximum)
+		return wrapErr(ErrValidation, "path %s: value %f is greater than maximum %f", path, value, *schema.Maximum)
 	}
 
 	if schema.ExclusiveMaximum != nil && value >= *schema.ExclusiveMaximum {
 		if valueType == "integer" {
-			return fmt.Errorf("path %s: value %d is not less than exclusive maximum %f", path, int64(value), *schema.ExclusiveMaximum)
+			return wrapErr(ErrValidation, "path %s: value %d is not less than exclusive maximum %f", path, int64(value), *schema.ExclusiveMaximum)
 		}
-		return fmt.Errorf("path %s: value %f is not less than exclusive maximum %f", path, value, *schema.ExclusiveMaximum)
+		return wrapErr(ErrValidation, "path %s: value %f is not less than exclusive maximum %f", path, value, *schema.ExclusiveMaximum)
 	}
 
 	return nil
@@ -206,20 +206,20 @@ func validateNumericEnum(value float64, schema *ValidationRule, path, valueType 
 	}
 
 	if valueType == "integer" {
-		return fmt.Errorf("path %s: value %d is not in enum", path, int64(value))
+		return wrapErr(ErrValidation, "path %s: value %d is not in enum", path, int64(value))
 	}
-	return fmt.Errorf("path %s: value %f is not in enum", path, value)
+	return wrapErr(ErrValidation, "path %s: value %f is not in enum", path, value)
 }
 
 // validateBool validates a boolean value
 func validateBool(node *yaml.Node, schema *ValidationRule, path string) error {
 	if node.Kind != yaml.ScalarNode {
-		return fmt.Errorf("path %s: expected boolean, got %s", path, node.Tag)
+		return wrapErr(ErrValidation, "path %s: expected boolean, got %s", path, node.Tag)
 	}
 
 	value, ok := parseBoolValue(node.Value)
 	if !ok {
-		return fmt.Errorf("path %s: invalid boolean: %s", path, node.Value)
+		return wrapErr(ErrValidation, "path %s: invalid boolean: %s", path, node.Value)
 	}
 
 	if schema.Enum != nil {
@@ -231,7 +231,7 @@ func validateBool(node *yaml.Node, schema *ValidationRule, path string) error {
 			}
 		}
 		if !valid {
-			return fmt.Errorf("path %s: value %t is not in enum", path, value)
+			return wrapErr(ErrValidation, "path %s: value %t is not in enum", path, value)
 		}
 	}
 
@@ -241,15 +241,15 @@ func validateBool(node *yaml.Node, schema *ValidationRule, path string) error {
 // validateArray validates an array value
 func validateArray(node *yaml.Node, schema *ValidationRule, path string) error {
 	if node.Kind != yaml.SequenceNode {
-		return fmt.Errorf("path %s: expected array, got %s", path, node.Tag)
+		return wrapErr(ErrValidation, "path %s: expected array, got %s", path, node.Tag)
 	}
 
 	if schema.MinItems != nil && len(node.Content) < *schema.MinItems {
-		return fmt.Errorf("path %s: array length %d is less than minimum %d", path, len(node.Content), *schema.MinItems)
+		return wrapErr(ErrValidation, "path %s: array length %d is less than minimum %d", path, len(node.Content), *schema.MinItems)
 	}
 
 	if schema.MaxItems != nil && len(node.Content) > *schema.MaxItems {
-		return fmt.Errorf("path %s: array length %d is greater than maximum %d", path, len(node.Content), *schema.MaxItems)
+		return wrapErr(ErrValidation, "path %s: array length %d is greater than maximum %d", path, len(node.Content), *schema.MaxItems)
 	}
 
 	if schema.UniqueItems {
@@ -257,7 +257,7 @@ func validateArray(node *yaml.Node, schema *ValidationRule, path string) error {
 		for i, item := range node.Content {
 			key := uniqueItemKey(item)
 			if seen[key] {
-				return fmt.Errorf("path %s: duplicate item at index %d", path, i)
+				return wrapErr(ErrValidation, "path %s: duplicate item at index %d", path, i)
 			}
 			seen[key] = true
 		}
@@ -278,7 +278,7 @@ func validateArray(node *yaml.Node, schema *ValidationRule, path string) error {
 // validateMap validates a map value
 func validateMap(node *yaml.Node, schema *ValidationRule, path string) error {
 	if node.Kind != yaml.MappingNode {
-		return fmt.Errorf("path %s: expected map, got %s", path, node.Tag)
+		return wrapErr(ErrValidation, "path %s: expected map, got %s", path, node.Tag)
 	}
 
 	// Check required fields
@@ -292,7 +292,7 @@ func validateMap(node *yaml.Node, schema *ValidationRule, path string) error {
 				}
 			}
 			if !found {
-				return fmt.Errorf("path %s: required field %s is missing", path, required)
+				return wrapErr(ErrValidation, "path %s: required field %s is missing", path, required)
 			}
 		}
 	}
@@ -314,7 +314,7 @@ func validateMap(node *yaml.Node, schema *ValidationRule, path string) error {
 				return err
 			}
 		} else if schema.AdditionalProperties != nil && !*schema.AdditionalProperties {
-			return fmt.Errorf("path %s: additional property %s is not allowed", path, key)
+			return wrapErr(ErrValidation, "path %s: additional property %s is not allowed", path, key)
 		}
 	}
 
