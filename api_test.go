@@ -285,3 +285,86 @@ func TestSentinelErrors(t *testing.T) {
 }
 
 func second[T any](_ T, err error) error { return err }
+
+// TestSerializationIsDeferred checks the guarantees of lazy serialization:
+// the document is only rendered when it is asked for, rendering it does not
+// change what a later render produces, and the result does not depend on
+// how often the document was rendered along the way.
+func TestSerializationIsDeferred(t *testing.T) {
+	const src = `app:
+  name: x    # keep this comment
+  count: 1
+
+  list: [1, 2]
+`
+	// Rendering twice must give the same bytes.
+	d := mustLoad(t, src)
+	if err := d.Set("app.name", "y"); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.AppendToArray("app.list", 3); err != nil {
+		t.Fatal(err)
+	}
+	first, err := d.String()
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, _ := d.String()
+	if first != second {
+		t.Errorf("String() is not idempotent:\n%s", diffLines(first, second))
+	}
+
+	// The same edits produce the same document whether or not it was
+	// rendered in between.
+	edit := func(renderEachStep bool) string {
+		doc := mustLoad(t, src)
+		for i := 0; i < 3; i++ {
+			_ = doc.Set("app.count", i)
+			_ = doc.Delete("app.list[0]")
+			_ = doc.AppendToArray("app.list", i)
+			if renderEachStep {
+				_, _ = doc.String()
+			}
+		}
+		out, _ := doc.String()
+		return out
+	}
+	if batch, interleaved := edit(false), edit(true); batch != interleaved {
+		t.Errorf("result depends on intermediate rendering:\n%s", diffLines(batch, interleaved))
+	}
+
+	// The formatting snapshot stays the one taken at load time, so a
+	// comment removed and re-added keeps its original spacing.
+	d = mustLoad(t, src)
+	_ = d.Set("app.name", "z")
+	out, _ := d.String()
+	if !strings.Contains(out, "name: z    # keep this comment") {
+		t.Errorf("comment spacing lost:\n%s", out)
+	}
+}
+
+// TestBuiltFromScratch covers documents that have no original text.
+func TestBuiltFromScratch(t *testing.T) {
+	d, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// An empty document is an empty mapping, and renders as one.
+	if out, _ := d.String(); out != "{}\n" {
+		t.Errorf("empty document renders as %q", out)
+	}
+	if err := d.Set("app.name", "new"); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Set("app.ports", []int64{80, 443}); err != nil {
+		t.Fatal(err)
+	}
+	want := "app:\n  name: new\n  ports:\n    - 80\n    - 443\n"
+	out, _ := d.String()
+	if out != want {
+		t.Errorf("got:\n%q\nwant:\n%q", out, want)
+	}
+	if again, _ := d.String(); again != out {
+		t.Errorf("not idempotent: %q vs %q", out, again)
+	}
+}

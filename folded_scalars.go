@@ -29,7 +29,7 @@ func preserveFoldedScalars(newContent, original string, info *FormattingInfo) st
 	w := newLineWalker()
 	for i, line := range originalLines {
 		li := w.next(line)
-		if li.skip || li.key == "" || info.ScalarStyles[li.keyPath] != yaml.FoldedStyle {
+		if li.skip || !li.hasKey || info.ScalarStyles[li.keyPath] != yaml.FoldedStyle {
 			continue
 		}
 		if !strings.HasPrefix(stripInlineComment(li.value), ">") {
@@ -40,9 +40,15 @@ func preserveFoldedScalars(newContent, original string, info *FormattingInfo) st
 		listItems := true
 		foundContent := false
 		var foldedLines []string
+		leadingBlank := false
 		for j := i + 1; j < len(originalLines); j++ {
 			nextLine := originalLines[j]
 			if strings.TrimSpace(nextLine) == "" {
+				if !foundContent && nextLine != "" {
+					// A whitespace-only line before any content carries
+					// meaning the layout below cannot reproduce.
+					leadingBlank = true
+				}
 				foldedLines = append(foldedLines, "")
 				continue
 			}
@@ -60,6 +66,9 @@ func preserveFoldedScalars(newContent, original string, info *FormattingInfo) st
 		}
 		for len(foldedLines) > 0 && foldedLines[len(foldedLines)-1] == "" {
 			foldedLines = foldedLines[:len(foldedLines)-1]
+		}
+		if leadingBlank {
+			continue // leave this scalar to the encoder
 		}
 		if !foundContent {
 			contentIndent = strings.Repeat(" ", indent+info.IndentSize)
@@ -90,7 +99,7 @@ func replaceFoldedScalars(content string, foldedInfo map[string]foldedScalarInfo
 	for i := 0; i < len(lines); i++ {
 		line := lines[i]
 		li := w.next(line)
-		if li.skip || li.key == "" {
+		if li.skip || !li.hasKey {
 			out = append(out, line)
 			continue
 		}
@@ -257,7 +266,8 @@ func stripInlineComment(value string) string {
 	if value == "" {
 		return value
 	}
-	if idx := inlineCommentIndex(value); idx > 0 {
+	if idx := inlineCommentIndex(value); idx >= 0 {
+		// A value that is nothing but a comment is an empty value.
 		return strings.TrimSpace(value[:idx])
 	}
 	return value

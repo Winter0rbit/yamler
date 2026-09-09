@@ -298,3 +298,152 @@ func TestDocumentedBehaviours(t *testing.T) {
 		t.Error("minimum violation not reported")
 	}
 }
+
+// TestFlowQuotingIsRespected checks that commas and colons inside quoted
+// scalars do not split flow collections when their style is restored.
+func TestFlowQuotingIsRespected(t *testing.T) {
+	cases := []string{
+		"a: [' ,']\nz: 1\n",
+		"a: [\"x, y\", z]\nz: 1\n",
+		"a: ['it''s, fine', b]\nz: 1\n",
+		"m: {k: 'a, b', n: 2}\nz: 1\n",
+		"m: {'a: b': 1}\nz: 1\n",
+		"n: [[1, 2], [3, 4]]\nz: 1\n",
+	}
+	for _, in := range cases {
+		doc, err := Load(in)
+		if err != nil {
+			t.Errorf("Load(%q): %v", in, err)
+			continue
+		}
+		before, _ := doc.Get("")
+		if err := doc.Set("z", 2); err != nil {
+			t.Errorf("Set on %q: %v", in, err)
+			continue
+		}
+		out, _ := doc.String()
+		if out != strings.Replace(in, "z: 1", "z: 2", 1) {
+			t.Errorf("formatting changed for %q:\n%s", in, out)
+		}
+		reloaded, err := Load(out)
+		if err != nil {
+			t.Errorf("output of %q does not parse: %v", in, err)
+			continue
+		}
+		after, _ := reloaded.Get("")
+		bm, _ := before.(map[string]interface{})
+		am, _ := after.(map[string]interface{})
+		if len(bm) != len(am) {
+			t.Errorf("data changed for %q", in)
+		}
+	}
+}
+
+// TestMultilineFlowKeepsBlankLines covers blank lines inside a multi-line
+// flow collection, which are part of a plain scalar's value.
+func TestMultilineFlowKeepsBlankLines(t *testing.T) {
+	in := "a: {k:\nv1\n\nv2}\nz: 1\n"
+	doc, err := Load(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, _ := doc.GetString("a.k")
+	if err := doc.Set("z", 2); err != nil {
+		t.Fatal(err)
+	}
+	out, _ := doc.String()
+	reloaded, err := Load(out)
+	if err != nil {
+		t.Fatalf("output does not parse: %v\n%s", err, out)
+	}
+	if got, _ := reloaded.GetString("a.k"); got != want {
+		t.Errorf("value changed: %q -> %q\noutput:\n%s", want, got, out)
+	}
+}
+
+// TestExplicitKeysKeepData checks documents whose keys yaml.v3 renders in
+// explicit "? key" form (keys longer than 128 characters).
+func TestExplicitKeysKeepData(t *testing.T) {
+	long := strings.Repeat("k", 200)
+	in := long + ":\n    a: 1\n    b: 2\n"
+	doc, err := Load(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := doc.Set(long+".a", 3); err != nil {
+		t.Fatal(err)
+	}
+	out, _ := doc.String()
+	reloaded, err := Load(out)
+	if err != nil {
+		t.Fatalf("output does not parse: %v\n%s", err, out)
+	}
+	a, _ := reloaded.GetInt(long + ".a")
+	b, _ := reloaded.GetInt(long + ".b")
+	if a != 3 || b != 2 {
+		t.Errorf("data changed: a=%d b=%d\n%s", a, b, out)
+	}
+}
+
+// TestEmptyQuotedKey covers "" used as a mapping key, which must not be
+// confused with "this line has no key".
+func TestEmptyQuotedKey(t *testing.T) {
+	in := "    a: 1\n    \"\": 2\n    b: 3\n"
+	doc, err := Load(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := doc.Set("a", 9); err != nil {
+		t.Fatal(err)
+	}
+	out, _ := doc.String()
+	if out != strings.Replace(in, "a: 1", "a: 9", 1) {
+		t.Errorf("layout changed:\n--- got ---\n%s--- want ---\n%s", out, in)
+	}
+	v, err := doc.GetInt("")
+	if err == nil && v == 2 {
+		return // the empty key is reachable, fine either way
+	}
+}
+
+// TestMultilinePlainScalar covers a plain scalar continued on the next line,
+// whose continuation must not be mistaken for a quoted scalar or a key.
+func TestMultilinePlainScalar(t *testing.T) {
+	in := "    a: one\n     two\n    b: 3\n"
+	doc, err := Load(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := doc.Set("b", 4); err != nil {
+		t.Fatal(err)
+	}
+	out, _ := doc.String()
+	reloaded, err := Load(out)
+	if err != nil {
+		t.Fatalf("output does not parse: %v\n%s", err, out)
+	}
+	if v, _ := reloaded.GetString("a"); v != "one two" {
+		t.Errorf("value changed to %q\noutput:\n%s", v, out)
+	}
+	if v, _ := reloaded.GetInt("b"); v != 4 {
+		t.Errorf("b = %d\noutput:\n%s", v, out)
+	}
+}
+
+// TestCommentOnlyValue covers "key: # comment", where the value is empty and
+// the block below the key belongs to it.
+func TestCommentOnlyValue(t *testing.T) {
+	in := "root: # note\n    items:\n        - a\n        - b\n"
+	doc, err := Load(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := doc.AppendToArray("root.items", "c"); err != nil {
+		t.Fatal(err)
+	}
+	out, _ := doc.String()
+	want := in + "        - c\n"
+	if out != want {
+		t.Errorf("unexpected output:\n--- got ---\n%s--- want ---\n%s", out, want)
+	}
+}

@@ -45,6 +45,7 @@ type FormattingInfo struct {
 	KeyIndents       map[string]int         // Exact indentation for each key
 	FlowObjectStyles map[string]string      // Original flow object strings to preserve exact formatting
 	CommentIndents   map[string]int         // Indentation of standalone comment lines by text (-1 if ambiguous)
+	Structural       bool                   // Whether the document root is a mapping or a sequence
 }
 
 // clone returns a deep copy of the formatting snapshot.

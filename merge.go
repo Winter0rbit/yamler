@@ -29,11 +29,6 @@ func (d *Document) Merge(other *Document) error {
 	}
 
 	// Update the raw content
-	content, err := d.ToBytes()
-	if err != nil {
-		return err
-	}
-	d.raw = string(content)
 
 	return nil
 }
@@ -74,11 +69,6 @@ func (d *Document) MergeAt(path string, other *Document) error {
 	}
 
 	// Update the raw content
-	content, err := d.ToBytes()
-	if err != nil {
-		return err
-	}
-	d.raw = string(content)
 
 	return nil
 }

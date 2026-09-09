@@ -20,11 +20,6 @@ func (d *Document) Set(path string, value interface{}) error {
 				return wrapErr(ErrRoot, "empty document root")
 			}
 			d.root.Content[0] = valueNode
-			content, err := d.ToBytes()
-			if err != nil {
-				return err
-			}
-			d.raw = string(content)
 			return nil
 		}
 
@@ -47,11 +42,6 @@ func (d *Document) Set(path string, value interface{}) error {
 			return err
 		}
 		root.Content = valueNode.Content
-		content, err := d.ToBytes()
-		if err != nil {
-			return err
-		}
-		d.raw = string(content)
 		return nil
 	}
 
@@ -108,11 +98,6 @@ func (d *Document) Set(path string, value interface{}) error {
 		return wrapErr(ErrType, "parent node is not mapping or sequence")
 	}
 
-	content, err := d.ToBytes()
-	if err != nil {
-		return err
-	}
-	d.raw = string(content)
 	return nil
 }
 

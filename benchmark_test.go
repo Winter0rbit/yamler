@@ -485,3 +485,32 @@ func BenchmarkRepeatedOperations(b *testing.B) {
 		}
 	})
 }
+
+// BenchmarkBatchMutations measures a batch of modifications applied to one
+// document before it is serialized once, the common configuration-editing
+// pattern.
+func BenchmarkBatchMutations(b *testing.B) {
+	for _, size := range []int{10, 100} {
+		for _, edits := range []int{1, 10, 100} {
+			content := generateLargeYAML(size)
+			b.Run(fmt.Sprintf("size_%d/edits_%d", size, edits), func(b *testing.B) {
+				b.ReportAllocs()
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					doc, err := Load(content)
+					if err != nil {
+						b.Fatal(err)
+					}
+					for j := 0; j < edits; j++ {
+						if err := doc.Set(fmt.Sprintf("app.servers[%d].port", j%size), 9000+j); err != nil {
+							b.Fatal(err)
+						}
+					}
+					if _, err := doc.ToBytes(); err != nil {
+						b.Fatal(err)
+					}
+				}
+			})
+		}
+	}
+}

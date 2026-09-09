@@ -151,7 +151,7 @@ func (d *Document) Delete(path string) error {
 			return wrapErr(ErrNotFound, "path %s: key %s not found", path, last)
 		}
 	}
-	return d.reserialize()
+	return nil
 }
 
 // DeleteAll removes every path matching the wildcard pattern (see GetAll)
@@ -180,7 +180,7 @@ func (d *Document) DeleteAll(pattern string) (int, error) {
 			return 0, err
 		}
 	}
-	return len(paths), d.reserialize()
+	return len(paths), nil
 }
 
 // deleteNode is Delete without re-serialization, for bulk operations.
@@ -235,17 +235,6 @@ func (p byDocumentOrder) Less(i, j int) bool {
 // pathSegments splits "a.b[2].c" into ["a", "b", "[2]", "c"].
 func pathSegments(path string) []string {
 	return splitPath(path)
-}
-
-// reserialize re-encodes the document after a structural change so that
-// d.raw reflects the current tree.
-func (d *Document) reserialize() error {
-	content, err := d.ToBytes()
-	if err != nil {
-		return err
-	}
-	d.raw = string(content)
-	return nil
 }
 
 func kindName(n *yaml.Node) string {

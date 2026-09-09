@@ -63,12 +63,10 @@ func collectMultilineFlowObject(lines []string, startLine int, firstValue string
 			result.WriteString(firstValue)
 			line = firstValue
 		} else {
-			// For subsequent lines, take the trimmed content
-			trimmed := strings.TrimSpace(line)
-			if trimmed != "" {
-				result.WriteString("\n")
-				result.WriteString(line)
-			}
+			// Keep subsequent lines verbatim: a blank line inside a
+			// multi-line plain scalar is part of its value.
+			result.WriteString("\n")
+			result.WriteString(line)
 		}
 
 		// Count brackets AFTER adding the line to result, ignoring comments
@@ -243,7 +241,7 @@ func detectLineFormatting(lines []string, info *FormattingInfo, indentLevels []i
 		if li.indent > 0 && !strings.HasPrefix(line, "\t") {
 			indentLevels = append(indentLevels, li.indent)
 		}
-		if emptyBefore > 0 && (li.key != "" || li.isItem) {
+		if emptyBefore > 0 && (li.hasKey || li.isItem) {
 			info.EmptyLines[li.idxPath] = emptyBefore
 		}
 		emptyBefore = 0
@@ -266,7 +264,7 @@ func detectLineFormatting(lines []string, info *FormattingInfo, indentLevels []i
 			}
 		}
 
-		if li.key == "" {
+		if !li.hasKey {
 			lastKey = nil
 			continue
 		}

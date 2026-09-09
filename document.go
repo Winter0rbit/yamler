@@ -203,6 +203,7 @@ func (d *Document) ToBytes() ([]byte, error) {
 		}
 
 		preserveNodeStylesWithInfo(d.root, info, "")
+		info.Structural = d.hasStructuralRoot()
 	}
 
 	// Work around yaml.v3 v3.0.1 emitting "!!merge <<" for merge keys.
@@ -229,6 +230,7 @@ func (d *Document) ToBytes() ([]byte, error) {
 		}
 
 		// Post-process to maintain original style characteristics
+		indentInfo.Structural = d.hasStructuralRoot()
 		result = preserveOriginalFormatting(result, d.raw, indentInfo, d.preserveDocumentSeparator)
 	}
 
@@ -239,14 +241,17 @@ func (d *Document) ToBytes() ([]byte, error) {
 
 	// Add the correct number of trailing newlines
 	// Logic to handle different scenarios:
-	// 1. If original was empty - no trailing newlines
+	// 1. Document built from scratch - one trailing newline unless it is empty
 	// 2. If original had trailing newlines - preserve exact count
 	// 3. If exactTrailingNewlines is enabled - preserve exactly (for file operations)
 	// 4. Otherwise - add one trailing newline (YAML standard)
 	var finalTrailingNewlines int
 	if d.raw == "" {
-		// Empty document - no trailing newlines
-		finalTrailingNewlines = 0
+		// No original text: follow the YAML convention unless the document
+		// serialized to nothing at all.
+		if len(result) > 0 {
+			finalTrailingNewlines = 1
+		}
 	} else if d.trailingNewlines > 0 {
 		// Original had trailing newlines - preserve exact count
 		finalTrailingNewlines = d.trailingNewlines
@@ -279,4 +284,17 @@ func (d *Document) String() (string, error) {
 		return "", err
 	}
 	return string(bytes), nil
+}
+
+// hasStructuralRoot reports whether the document root is a mapping or a
+// sequence. A scalar root has no line structure to preserve.
+func (d *Document) hasStructuralRoot() bool {
+	if d.root == nil || len(d.root.Content) == 0 {
+		return false
+	}
+	switch d.root.Content[0].Kind {
+	case yaml.MappingNode, yaml.SequenceNode:
+		return true
+	}
+	return false
 }
