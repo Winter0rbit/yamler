@@ -73,11 +73,19 @@ The YAML specification forbids tabs for indentation and `yaml.v3` rejects such i
 ### Directives
 `%YAML` / `%TAG` directives are not preserved.
 
+### Documents the line model cannot describe
+Formatting restoration is skipped, and the encoder output is used as is, for:
+- documents whose root is a scalar rather than a mapping or a sequence,
+- keys longer than 128 characters, which yaml.v3 writes in explicit `? key` / `: value` form,
+- block scalars whose content starts with a whitespace-only line.
+
+The data is preserved in all three cases; only the original layout is not.
+
 ## 🚀 Recommendations
 
 1. Use `LoadAll` for Kubernetes-style multi-document files.
 2. Add your own configuration files to a round-trip test (see `roundtrip_test.go`) to lock in their layout.
-3. Prefer one `Save` after a batch of modifications: every mutation re-serializes the document internally.
+3. Apply as many changes as you like before saving: mutations are cheap, serialization happens once when the document is rendered.
 4. Run your own configuration files through the test in `examples/` (or a quick round-trip test) before relying on the library in production.
 
 ---

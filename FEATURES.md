@@ -373,7 +373,7 @@ go test -bench . -benchmem
 
 ### Bulk Operations
 
-Every mutation (`Set`, `AppendToArray`, ...) re-serializes the document to keep the formatting snapshot current. `SetAll` applies all matching updates and serializes once, so prefer it over a loop of `Set` calls when many paths change:
+Mutations (`Set`, `Delete`, `AppendToArray`, ...) only change the node tree; the document is serialized when it is rendered. A batch of edits therefore costs one serialization no matter how many there are, and `SetAll` is a convenience rather than a performance necessity:
 ```go
 // Individual operations: one serialization per call
 for i := 0; i < 100; i++ {

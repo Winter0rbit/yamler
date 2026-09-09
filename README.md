@@ -391,7 +391,7 @@ Formatting information is detected once at load time and cached; parsed paths ar
 go test -bench . -benchmem
 ```
 
-Every mutation re-serializes the document to keep the formatting snapshot current, so batch many changes with `SetAll` or apply them before a single `Save` rather than saving after each one.
+Mutations only change the node tree: the document is rendered when you ask for it (`String`, `ToBytes`, `Save`), so the cost of a batch of edits does not grow with their number, and rendering the same document twice always gives the same bytes.
 
 ## ⚠️ Known Limitations
 
@@ -401,6 +401,7 @@ Every mutation re-serializes the document to keep the formatting snapshot curren
 - A comment on a `---` separator line is moved to the following line.
 - New arrays created by `Set`/`AppendToArray` use two-space block style; existing arrays keep their own style.
 - Tabs inside values, CR-only line breaks and explicit tags (`!!str`) are outside what the round-trip tests cover.
+- Documents whose root is a scalar, keys long enough that yaml.v3 writes them in explicit `? key` form (over 128 characters), and block scalars whose content starts with a whitespace-only line are written by the encoder without formatting restoration.
 
 See [FORMATTING_SUPPORT.md](FORMATTING_SUPPORT.md) for the detailed compatibility matrix and [FEATURES.md](FEATURES.md) for a feature walkthrough.
 
