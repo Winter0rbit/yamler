@@ -8,56 +8,57 @@ on:
 
 jobs:
   test:
+    name: Test (Go ${{ matrix.go }})
     runs-on: ubuntu-latest
-    
+    strategy:
+      fail-fast: false
+      matrix:
+        go: ['1.21', 'stable']
+
     steps:
     - uses: actions/checkout@v4
-    
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.21'
-        
-    - name: Cache Go modules
-      uses: actions/cache@v3
-      with:
-        path: ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
 
-    - name: Download dependencies
-      run: go mod download
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ matrix.go }}
+        cache: true
 
     - name: Verify dependencies
       run: go mod verify
 
     - name: Run tests
-      run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+      run: go test -race -coverprofile=coverage.txt -covermode=atomic ./...
+
+    - name: Build examples
+      run: |
+        for dir in examples/*/; do
+          echo "building $dir"
+          (cd "$dir" && go build -o /dev/null ./...)
+        done
 
     - name: Upload coverage reports to Codecov
-      uses: codecov/codecov-action@v3
+      if: matrix.go == 'stable'
+      uses: codecov/codecov-action@v4
       with:
         file: ./coverage.txt
         fail_ci_if_error: false
 
   lint:
     runs-on: ubuntu-latest
-    
+
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Set up Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v5
       with:
-        go-version: '1.21'
-        
-    - name: Download dependencies
-      run: go mod download
+        go-version: 'stable'
+        cache: true
 
     - name: Format check
       run: |
-        if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
+        if [ -n "$(gofmt -s -l .)" ]; then
           echo "The following files are not formatted:"
           gofmt -s -l .
           exit 1
@@ -66,11 +67,33 @@ jobs:
     - name: Vet
       run: go vet ./...
 
-    - name: Imports check
-      run: |
-        go install golang.org/x/tools/cmd/goimports@latest
-        if [ "$(goimports -l . | wc -l)" -gt 0 ]; then
-          echo "The following files have import issues:"
-          goimports -l .
-          exit 1
-        fi
+    - name: golangci-lint
+      uses: golangci/golangci-lint-action@v6
+      with:
+        version: latest
+
+  fuzz:
+    name: Fuzz (smoke)
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: 'stable'
+        cache: true
+
+    # The committed seed corpus runs as part of the normal test job; this
+    # adds a short round of new inputs so that a change which breaks
+    # round-tripping is caught in the pull request rather than at night.
+    - name: Fuzz round trip
+      run: go test -run '^$' -fuzz FuzzRoundTrip -fuzztime 90s .
+
+    - name: Upload failing inputs
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: fuzz-failures
+        path: testdata/fuzz/
