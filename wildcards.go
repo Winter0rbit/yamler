@@ -200,7 +200,11 @@ func wildcardToRegex(pattern string) string {
 	escaped := regexp.QuoteMeta(pattern)
 
 	// Replace escaped wildcard patterns with regex equivalents
-	escaped = strings.ReplaceAll(escaped, `\*\*`, `.*`) // ** matches any path
+	// ** matches zero or more path segments: "**.debug" also matches a
+	// top-level "debug", "a.**" also matches "a" itself.
+	escaped = strings.ReplaceAll(escaped, `\*\*\.`, `(?:.*\.)?`)
+	escaped = strings.ReplaceAll(escaped, `\.\*\*`, `(?:\..*)?`)
+	escaped = strings.ReplaceAll(escaped, `\*\*`, `.*`)
 
 	// Handle [*] for array index wildcards
 	escaped = strings.ReplaceAll(escaped, `\[\*\]`, `\[[0-9]+\]`) // [*] matches any array index

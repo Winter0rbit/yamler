@@ -46,3 +46,34 @@ type FormattingInfo struct {
 	FlowObjectStyles map[string]string      // Original flow object strings to preserve exact formatting
 	CommentIndents   map[string]int         // Indentation of standalone comment lines by text (-1 if ambiguous)
 }
+
+// clone returns a deep copy of the formatting snapshot.
+func (info *FormattingInfo) clone() *FormattingInfo {
+	c := *info
+	c.EmptyLines = copyMap(info.EmptyLines)
+	c.FlowStyles = copyMap(info.FlowStyles)
+	c.ScalarStyles = copyMap(info.ScalarStyles)
+	c.MultilineFlow = copyMap(info.MultilineFlow)
+	c.ZeroIndentArrays = copyMap(info.ZeroIndentArrays)
+	c.CommentAlignment = copyMap(info.CommentAlignment)
+	c.KeyIndents = copyMap(info.KeyIndents)
+	c.FlowObjectStyles = copyMap(info.FlowObjectStyles)
+	c.CommentIndents = copyMap(info.CommentIndents)
+	c.ArrayStyles = make(map[string]*ArrayStyle, len(info.ArrayStyles))
+	for k, v := range info.ArrayStyles {
+		s := *v
+		c.ArrayStyles[k] = &s
+	}
+	return &c
+}
+
+func copyMap[K comparable, V any](m map[K]V) map[K]V {
+	if m == nil {
+		return nil
+	}
+	c := make(map[K]V, len(m))
+	for k, v := range m {
+		c[k] = v
+	}
+	return c
+}

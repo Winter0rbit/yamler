@@ -86,6 +86,12 @@ doc.Set("database", map[string]interface{}{
     "host": "localhost",
     "port": 5432,
 })
+
+// Structure
+exists := doc.Has("database.port")
+keys, err := doc.Keys("database")   // in document order
+err = doc.Delete("database.port")
+clone := doc.Copy()
 ```
 
 #### Flexible Boolean Parsing
@@ -193,7 +199,11 @@ doc.GetAll("apps.web.*.config")             // All config under apps.web
 keys, _ := doc.GetKeys("apps.*")            // ["apps.web", "apps.api"]
 paths, _ := doc.GetPathsRecursive()         // Every leaf path in the document
 
+// Bulk delete; returns the number of removed entries
+n, _ := doc.DeleteAll("**.debug")
+
 // SetAll only updates paths that already exist; it never creates keys.
+// "**" matches zero or more segments, so "**.debug" also matches a top-level "debug".
 ```
 
 ### 🧩 Document Merging
@@ -445,7 +455,7 @@ if err != nil {
 ```
 
 ### Error Context
-Errors are prefixed with the path that caused them, e.g. `path app.port: invalid integer value: ...` or `path items[abc]: invalid array index: abc`. Errors from `os` and `yaml.v3` are wrapped and can be inspected with `errors.Is` / `errors.As`.
+Errors are prefixed with the path that caused them, e.g. `path app.port: invalid integer value: ...` or `path items[abc]: invalid array index: abc`, and wrap a sentinel (`ErrNotFound`, `ErrType`, `ErrIndex`, `ErrPath`, `ErrRoot`, `ErrParse`, `ErrIO`, `ErrMultiDocument`, `ErrValidation`, `ErrUnsupported`) for `errors.Is`. Errors from `os` and `yaml.v3` stay reachable with `errors.Is` / `errors.As`.
 
 ## 🎨 Real-World Compatibility
 

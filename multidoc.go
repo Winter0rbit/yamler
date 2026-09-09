@@ -99,7 +99,7 @@ func LoadAll(content string) ([]*Document, error) {
 	for _, raw := range splitDocuments(content) {
 		n, err := countDocuments(raw)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse YAML: %w", err)
+			return nil, wrapCause(ErrParse, err, "failed to parse YAML: %v", err)
 		}
 		if n == 0 {
 			// Attach an empty trailing document ("---\n") to the previous one
@@ -129,7 +129,7 @@ func LoadAllBytes(content []byte) ([]*Document, error) {
 func LoadAllFile(filename string) ([]*Document, error) {
 	content, err := os.ReadFile(filename)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read file: %w", err)
+		return nil, wrapCause(ErrIO, err, "failed to read file: %v", err)
 	}
 	return LoadAllBytes(content)
 }

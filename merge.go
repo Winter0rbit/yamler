@@ -10,7 +10,7 @@ import (
 // and adding/updating values from the other document
 func (d *Document) Merge(other *Document) error {
 	if other == nil {
-		return fmt.Errorf("other document is nil")
+		return wrapErr(ErrRoot, "other document is nil")
 	}
 
 	otherRoot, err := other.mappingRoot()
@@ -41,7 +41,7 @@ func (d *Document) Merge(other *Document) error {
 // MergeAt merges another Document at the specified path in this document
 func (d *Document) MergeAt(path string, other *Document) error {
 	if other == nil {
-		return fmt.Errorf("other document is nil")
+		return wrapErr(ErrRoot, "other document is nil")
 	}
 
 	otherRoot, err := other.mappingRoot()
@@ -97,7 +97,7 @@ func mergeNodes(target, source *yaml.Node) error {
 	case yaml.ScalarNode:
 		return mergeScalarNodes(target, source)
 	default:
-		return fmt.Errorf("unsupported node kind for merging: %v", source.Kind)
+		return wrapErr(ErrUnsupported, "unsupported node kind for merging: %v", source.Kind)
 	}
 }
 

@@ -212,6 +212,11 @@ func applyFlowObjectStyles(content string, info *FormattingInfo) string {
 			continue
 		}
 		currentValues := extractFlowObjectValues(currentValue)
+		if !sameKeys(currentValues, extractFlowObjectValues(originalStyle)) {
+			// Keys were added or removed: the original text cannot be
+			// patched, keep the encoder's rendering.
+			continue
+		}
 		if strings.Contains(originalStyle, "\n") {
 			// Collapsed multi-line flow object: put the new values into the
 			// original layout.
@@ -405,4 +410,17 @@ func updateMultilineFlowArrayWithElements(originalFlow string, newElements []str
 	result += "]"
 
 	return result
+}
+
+// sameKeys reports whether two flow-object value maps have the same keys.
+func sameKeys(a, b map[string]string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k := range a {
+		if _, ok := b[k]; !ok {
+			return false
+		}
+	}
+	return true
 }

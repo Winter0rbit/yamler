@@ -1,7 +1,6 @@
 package yamler
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -16,7 +15,7 @@ func (d *Document) GetArrayLength(path string) (int, error) {
 	}
 
 	if node.Kind != yaml.SequenceNode {
-		return 0, fmt.Errorf("path %s: expected sequence node", path)
+		return 0, wrapErr(ErrType, "path %s: expected sequence node", path)
 	}
 
 	return len(node.Content), nil
@@ -26,7 +25,7 @@ func (d *Document) GetArrayLength(path string) (int, error) {
 func getOrCreateArrayNode(root *yaml.Node, path string) (*yaml.Node, error) {
 	parts := splitPath(path)
 	if len(parts) == 0 {
-		return nil, fmt.Errorf("empty path")
+		return nil, wrapErr(ErrPath, "empty path")
 	}
 
 	current := root
@@ -200,7 +199,7 @@ func (d *Document) AppendToArray(path string, value interface{}) error {
 
 		// Path exists, check if it's an array
 		if existingNode.Kind != yaml.SequenceNode {
-			return fmt.Errorf("path %s: not an array", path)
+			return wrapErr(ErrType, "path %s: not an array", path)
 		}
 
 		// It's an array, append to it
@@ -268,7 +267,7 @@ func (d *Document) RemoveFromArray(path string, index int) error {
 	}
 
 	if index < 0 || index >= len(arrayNode.Content) {
-		return fmt.Errorf("array index out of bounds: %d", index)
+		return wrapErr(ErrIndex, "array index out of bounds: %d", index)
 	}
 
 	arrayNode.Content = append(arrayNode.Content[:index], arrayNode.Content[index+1:]...)
@@ -293,7 +292,7 @@ func (d *Document) UpdateArrayElement(path string, index int, value interface{})
 	}
 
 	if index < 0 || index >= len(arrayNode.Content) {
-		return fmt.Errorf("array index out of bounds: %d", index)
+		return wrapErr(ErrIndex, "array index out of bounds: %d", index)
 	}
 
 	valueNode, err := interfaceToNode(value)
@@ -333,7 +332,7 @@ func (d *Document) InsertIntoArray(path string, index int, value interface{}) er
 	}
 
 	if index < 0 || index > len(arrayNode.Content) {
-		return fmt.Errorf("array index out of bounds: %d", index)
+		return wrapErr(ErrIndex, "array index out of bounds: %d", index)
 	}
 
 	valueNode, err := interfaceToNode(value)
@@ -362,11 +361,11 @@ func (d *Document) GetArrayElement(path string, index int) (interface{}, error) 
 	}
 
 	if node.Kind != yaml.SequenceNode {
-		return nil, fmt.Errorf("path %s: expected sequence node", path)
+		return nil, wrapErr(ErrType, "path %s: expected sequence node", path)
 	}
 
 	if index < 0 || index >= len(node.Content) {
-		return nil, fmt.Errorf("path %s: index %d out of bounds", path, index)
+		return nil, wrapErr(ErrIndex, "path %s: index %d out of bounds", path, index)
 	}
 
 	return nodeToInterface(node.Content[index])
@@ -383,7 +382,7 @@ func (d *Document) GetTypedArrayElement(path string, index int, targetType strin
 	case "string":
 		str, ok := value.(string)
 		if !ok {
-			return nil, fmt.Errorf("path %s[%d]: expected string, got %T", path, index, value)
+			return nil, wrapErr(ErrType, "path %s[%d]: expected string, got %T", path, index, value)
 		}
 		return str, nil
 	case "int":
@@ -393,7 +392,7 @@ func (d *Document) GetTypedArrayElement(path string, index int, targetType strin
 		case string:
 			return strconv.ParseInt(v, 10, 64)
 		default:
-			return nil, fmt.Errorf("path %s[%d]: expected integer, got %T", path, index, value)
+			return nil, wrapErr(ErrType, "path %s[%d]: expected integer, got %T", path, index, value)
 		}
 	case "float":
 		switch v := value.(type) {
@@ -404,7 +403,7 @@ func (d *Document) GetTypedArrayElement(path string, index int, targetType strin
 		case string:
 			return strconv.ParseFloat(v, 64)
 		default:
-			return nil, fmt.Errorf("path %s[%d]: expected float, got %T", path, index, value)
+			return nil, wrapErr(ErrType, "path %s[%d]: expected float, got %T", path, index, value)
 		}
 	case "bool":
 		switch v := value.(type) {
@@ -418,13 +417,13 @@ func (d *Document) GetTypedArrayElement(path string, index int, targetType strin
 			case "false", "no", "0", "off":
 				return false, nil
 			default:
-				return nil, fmt.Errorf("path %s[%d]: invalid boolean value: %s", path, index, v)
+				return nil, wrapErr(ErrType, "path %s[%d]: invalid boolean value: %s", path, index, v)
 			}
 		default:
-			return nil, fmt.Errorf("path %s[%d]: expected boolean, got %T", path, index, value)
+			return nil, wrapErr(ErrType, "path %s[%d]: expected boolean, got %T", path, index, value)
 		}
 	default:
-		return nil, fmt.Errorf("path %s[%d]: unsupported type: %s", path, index, targetType)
+		return nil, wrapErr(ErrType, "path %s[%d]: unsupported type: %s", path, index, targetType)
 	}
 }
 
@@ -442,7 +441,7 @@ func (d *Document) getNode(path string) (*yaml.Node, error) {
 	parts := strings.Split(path, ".")
 	for _, part := range parts {
 		if node.Kind != yaml.MappingNode {
-			return nil, fmt.Errorf("path %s: expected mapping node", path)
+			return nil, wrapErr(ErrType, "path %s: expected mapping node", path)
 		}
 		found := false
 		for i := 0; i < len(node.Content); i += 2 {
@@ -453,7 +452,7 @@ func (d *Document) getNode(path string) (*yaml.Node, error) {
 			}
 		}
 		if !found {
-			return nil, fmt.Errorf("path %s: key %s not found", path, part)
+			return nil, wrapErr(ErrNotFound, "path %s: key %s not found", path, part)
 		}
 	}
 	return node, nil
@@ -463,7 +462,7 @@ func (d *Document) getNode(path string) (*yaml.Node, error) {
 func getArrayNode(root *yaml.Node, path string) (*yaml.Node, error) {
 	parts := splitPath(path)
 	if len(parts) == 0 {
-		return nil, fmt.Errorf("empty path")
+		return nil, wrapErr(ErrPath, "empty path")
 	}
 
 	current := root
@@ -475,16 +474,16 @@ func getArrayNode(root *yaml.Node, path string) (*yaml.Node, error) {
 				return nil, err
 			}
 			if current.Kind != yaml.SequenceNode {
-				return nil, fmt.Errorf("path %s: not an array", path)
+				return nil, wrapErr(ErrType, "path %s: not an array", path)
 			}
 			if idx < 0 || idx >= len(current.Content) {
-				return nil, fmt.Errorf("array index out of bounds: %d", idx)
+				return nil, wrapErr(ErrIndex, "array index out of bounds: %d", idx)
 			}
 			current = current.Content[idx]
 			continue
 		}
 		if current.Kind != yaml.MappingNode {
-			return nil, fmt.Errorf("path %s: not a map", path)
+			return nil, wrapErr(ErrType, "path %s: not a map", path)
 		}
 		found := false
 		for j := 0; j < len(current.Content); j += 2 {
@@ -495,12 +494,12 @@ func getArrayNode(root *yaml.Node, path string) (*yaml.Node, error) {
 			}
 		}
 		if !found {
-			return nil, fmt.Errorf("path %s: key not found", path)
+			return nil, wrapErr(ErrNotFound, "path %s: key not found", path)
 		}
 	}
 
 	if current.Kind != yaml.SequenceNode {
-		return nil, fmt.Errorf("path %s: not an array", path)
+		return nil, wrapErr(ErrType, "path %s: not an array", path)
 	}
 	return current, nil
 }

@@ -65,7 +65,7 @@ func nodeToInterface(node *yaml.Node) (interface{}, error) {
 		}
 		return result, nil
 	default:
-		return nil, fmt.Errorf("unsupported node kind: %v", node.Kind)
+		return nil, wrapErr(ErrUnsupported, "unsupported node kind: %v", node.Kind)
 	}
 }
 
@@ -117,7 +117,7 @@ func interfaceToNode(v interface{}) (*yaml.Node, error) {
 	case nil:
 		return createNullNode(), nil
 	default:
-		return nil, fmt.Errorf("unsupported type: %T", v)
+		return nil, wrapErr(ErrUnsupported, "unsupported type: %T", v)
 	}
 }
 
