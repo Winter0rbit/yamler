@@ -148,12 +148,6 @@ func (d *Document) AppendToArray(path string, value interface{}) error {
 
 				arrayNode.Content = append(arrayNode.Content, valueNode)
 
-				content, err := d.ToBytes()
-				if err != nil {
-					return err
-				}
-				d.raw = string(content)
-
 				// Apply the original style if we had one
 				if originalStyle != nil {
 					err = d.applyArrayStyle(path, originalStyle)
@@ -181,12 +175,6 @@ func (d *Document) AppendToArray(path string, value interface{}) error {
 
 			arrayNode.Content = append(arrayNode.Content, valueNode)
 
-			content, err := d.ToBytes()
-			if err != nil {
-				return err
-			}
-			d.raw = string(content)
-
 			// Apply the original style if we had one
 			if originalStyle != nil {
 				err = d.applyArrayStyle(path, originalStyle)
@@ -210,12 +198,6 @@ func (d *Document) AppendToArray(path string, value interface{}) error {
 
 		existingNode.Content = append(existingNode.Content, valueNode)
 
-		content, err := d.ToBytes()
-		if err != nil {
-			return err
-		}
-		d.raw = string(content)
-
 		// Apply the original style if we had one
 		if originalStyle != nil {
 			err = d.applyArrayStyle(path, originalStyle)
@@ -238,12 +220,6 @@ func (d *Document) AppendToArray(path string, value interface{}) error {
 	}
 
 	arrayNode.Content = append(arrayNode.Content, valueNode)
-
-	content, err := d.ToBytes()
-	if err != nil {
-		return err
-	}
-	d.raw = string(content)
 
 	// Apply the original style if we had one
 	if originalStyle != nil {
@@ -272,11 +248,6 @@ func (d *Document) RemoveFromArray(path string, index int) error {
 
 	arrayNode.Content = append(arrayNode.Content[:index], arrayNode.Content[index+1:]...)
 
-	content, err := d.ToBytes()
-	if err != nil {
-		return err
-	}
-	d.raw = string(content)
 	return nil
 }
 
@@ -310,11 +281,6 @@ func (d *Document) UpdateArrayElement(path string, index int, value interface{})
 
 	arrayNode.Content[index] = valueNode
 
-	content, err := d.ToBytes()
-	if err != nil {
-		return err
-	}
-	d.raw = string(content)
 	return nil
 }
 
@@ -345,11 +311,6 @@ func (d *Document) InsertIntoArray(path string, index int, value interface{}) er
 
 	arrayNode.Content = append(arrayNode.Content[:index], append([]*yaml.Node{valueNode}, arrayNode.Content[index:]...)...)
 
-	content, err := d.ToBytes()
-	if err != nil {
-		return err
-	}
-	d.raw = string(content)
 	return nil
 }
 

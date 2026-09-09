@@ -19,6 +19,8 @@
 - ✅ Formatting-info and path caches, pooled buffers
 - ✅ CI: tests with `-race`, `gofmt`, `go vet`, `goimports`
 - ✅ `Has` / `Keys` / `Copy` / `Delete` / `DeleteAll`; sentinel errors for `errors.Is`
+- ✅ Lazy serialization: mutations only touch the node tree, rendering happens on `String`/`ToBytes`/`Save`
+- ✅ `OrderedMap` for values whose key order matters
 
 ## 🎯 Priorities
 
@@ -33,7 +35,6 @@
 - [ ] Keep insertion position for new keys (e.g. insert after a given key)
 
 ### Phase 3: Performance
-- [ ] Avoid re-serializing the whole document on every mutation (serialize lazily on `ToBytes`)
 - [ ] Profile and benchmark 1 MB+ and 10 MB+ documents; target memory < 2x file size
 - [ ] Performance regression benchmarks in CI
 
@@ -41,7 +42,6 @@
 - [ ] Preserve `%YAML` / `%TAG` directives
 - [ ] Keep comments on `---` separator lines in place
 - [ ] Preserve CRLF line endings
-- [ ] Preserve key order of `map[string]interface{}` values (ordered input type)
 
 ### Phase 5: Tooling
 - [ ] Configuration diff between two documents

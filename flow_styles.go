@@ -129,7 +129,7 @@ func applyArrayStyles(content string, info *FormattingInfo) string {
 	w := newLineWalker()
 	for i, line := range lines {
 		li := w.next(line)
-		if li.skip || li.key == "" {
+		if li.skip || !li.hasKey {
 			continue
 		}
 		style, ok := info.ArrayStyles[li.keyPath]
@@ -160,7 +160,7 @@ func applyArrayStyles(content string, info *FormattingInfo) string {
 			continue
 		}
 
-		elements := strings.Split(value[start+1:end], ",")
+		elements := splitFlowObjectParts(value[start+1 : end])
 		for j, elem := range elements {
 			elements[j] = strings.TrimSpace(elem)
 		}
@@ -196,7 +196,7 @@ func applyFlowObjectStyles(content string, info *FormattingInfo) string {
 	w := newLineWalker()
 	for i, line := range lines {
 		li := w.next(line)
-		if li.skip || li.key == "" {
+		if li.skip || !li.hasKey {
 			continue
 		}
 		originalStyle, ok := info.FlowObjectStyles[li.keyPath]
@@ -270,10 +270,7 @@ func extractFlowObjectValues(flowStr string) map[string]string {
 
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
-		if strings.Contains(part, ":") {
-			idx := strings.Index(part, ":")
-			key := strings.TrimSpace(part[:idx])
-			value := strings.TrimSpace(part[idx+1:])
+		if key, value, ok := splitKeyValue(part); ok {
 			values[key] = value
 		}
 	}
@@ -286,25 +283,42 @@ func splitFlowObjectParts(content string) []string {
 	var parts []string
 	var current strings.Builder
 	depth := 0
-
-	for _, r := range content {
-		switch r {
-		case '{', '[':
-			depth++
-			current.WriteRune(r)
-		case '}', ']':
-			depth--
-			current.WriteRune(r)
-		case ',':
-			if depth == 0 {
-				parts = append(parts, current.String())
-				current.Reset()
-			} else {
-				current.WriteRune(r)
+	var quote byte
+	tokenStart := true
+	for i := 0; i < len(content); i++ {
+		c := content[i]
+		if quote != 0 {
+			current.WriteByte(c)
+			if c == quote {
+				if quote == '\'' && i+1 < len(content) && content[i+1] == '\'' {
+					i++
+					current.WriteByte(content[i])
+					continue
+				}
+				if quote == '"' && i > 0 && content[i-1] == '\\' {
+					continue
+				}
+				quote = 0
 			}
-		default:
-			current.WriteRune(r)
+			continue
 		}
+		switch {
+		case (c == '"' || c == '\'') && tokenStart:
+			quote = c
+			current.WriteByte(c)
+		case c == '{' || c == '[':
+			depth++
+			current.WriteByte(c)
+		case c == '}' || c == ']':
+			depth--
+			current.WriteByte(c)
+		case c == ',' && depth == 0:
+			parts = append(parts, current.String())
+			current.Reset()
+		default:
+			current.WriteByte(c)
+		}
+		tokenStart = startsToken(content, i, tokenStart)
 	}
 
 	if current.Len() > 0 {

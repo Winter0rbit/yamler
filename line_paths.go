@@ -14,7 +14,8 @@ import (
 type lineInfo struct {
 	indent int    // number of leading spaces
 	isItem bool   // line starts with "- " (or is a bare "-")
-	key    string // mapping key on this line, "" if none
+	key    string // mapping key on this line, meaningful only when hasKey
+	hasKey bool   // whether this line carries a mapping key (which may be "")
 	// path is the dotted path of the mapping key on this line, or, for a
 	// sequence item, the path of the sequence it belongs to. Array indices
 	// are not part of the path, so every item of a sequence shares the
@@ -39,7 +40,8 @@ type lineInfo struct {
 
 type pathFrame struct {
 	indent int
-	key    string // "" for a sequence-item frame
+	key    string // mapping key of this frame, meaningful unless isItem
+	isItem bool   // this frame is a sequence item, not a mapping key
 	index  int    // item index for a sequence-item frame
 	items  int    // number of items seen under this frame
 }
@@ -53,10 +55,11 @@ type lineWalker struct {
 	flowQuote     byte // quote character of a string left open at the end of the previous line
 	flowToken     bool // whether the next flow line starts a new scalar
 	openQuote     byte // quote character of a multi-line quoted scalar (block context)
+	plainScalarAt int  // column of the node owning an open plain scalar, -1 if none
 }
 
 func newLineWalker() *lineWalker {
-	return &lineWalker{blockScalarAt: -1}
+	return &lineWalker{blockScalarAt: -1, plainScalarAt: -1}
 }
 
 // pathOf renders the stack without indices: keys are joined with dots and
@@ -64,7 +67,7 @@ func newLineWalker() *lineWalker {
 func (w *lineWalker) pathOf(stack []pathFrame) string {
 	var b strings.Builder
 	for _, f := range stack {
-		if f.key != "" {
+		if !f.isItem {
 			if b.Len() > 0 {
 				b.WriteByte('.')
 			}
@@ -80,7 +83,7 @@ func (w *lineWalker) pathOf(stack []pathFrame) string {
 func (w *lineWalker) idxPathOf(stack []pathFrame) string {
 	var b strings.Builder
 	for _, f := range stack {
-		if f.key != "" {
+		if !f.isItem {
 			if b.Len() > 0 {
 				b.WriteByte('.')
 			}
@@ -111,13 +114,13 @@ func (w *lineWalker) pushItem(indent int) {
 		index = w.rootItems
 		w.rootItems++
 	}
-	w.stack = append(w.stack, pathFrame{indent: indent, index: index})
+	w.stack = append(w.stack, pathFrame{indent: indent, isItem: true, index: index})
 }
 
 // keyColumn returns the column of the key on a line: for "- key: v" item
 // lines that is two columns right of the dash.
 func keyColumn(li lineInfo) int {
-	if li.key != "" {
+	if li.hasKey {
 		return li.keyCol
 	}
 	return li.indent
@@ -129,7 +132,7 @@ func keyColumn(li lineInfo) int {
 // item's dash.
 func (w *lineWalker) parentIsItem(li lineInfo) bool {
 	parent := len(w.stack) - li.frames - 1
-	return li.frames > 0 && parent >= 0 && w.stack[parent].key == ""
+	return li.frames > 0 && parent >= 0 && w.stack[parent].isItem
 }
 
 // next consumes one line and returns its description.
@@ -142,6 +145,14 @@ func (w *lineWalker) next(line string) lineInfo {
 			return lineInfo{indent: indent, skip: true}
 		}
 		w.blockScalarAt = -1
+	}
+	if w.plainScalarAt >= 0 {
+		// A plain scalar continues on the following more-indented lines; such
+		// a line is content, whatever it looks like.
+		if trimmed != "" && indent > w.plainScalarAt && !strings.HasPrefix(trimmed, "#") {
+			return lineInfo{indent: indent, skip: true}
+		}
+		w.plainScalarAt = -1
 	}
 	if w.openQuote != 0 {
 		// Continuation of a multi-line quoted scalar.
@@ -181,7 +192,7 @@ func (w *lineWalker) next(line string) lineInfo {
 		// Close previous items of the same sequence and anything nested deeper.
 		for len(w.stack) > 0 {
 			top := w.stack[len(w.stack)-1]
-			if top.indent > indent || (top.indent == indent && top.key == "") {
+			if top.indent > indent || (top.indent == indent && top.isItem) {
 				w.stack = w.stack[:len(w.stack)-1]
 				continue
 			}
@@ -240,10 +251,18 @@ func (w *lineWalker) next(line string) lineInfo {
 		if isBlockScalarIndicator(rest) {
 			w.blockScalarAt = info.indent
 		}
-		if v := stripInlineComment(rest); v != "" && (v[0] == '[' || v[0] == '{') {
-			w.openFlow(v)
-		} else if v != "" && (v[0] == '"' || v[0] == '\'') && !closesQuote(v[1:], v[0]) {
-			w.openQuote = v[0]
+		// Only a line that introduces a value ("- ...") can open a
+		// multi-line collection or quoted scalar here; a line without a key
+		// or a dash is the continuation of the previous scalar.
+		if v := stripInlineComment(rest); info.isItem && v != "" {
+			switch {
+			case v[0] == '[' || v[0] == '{':
+				w.openFlow(v)
+			case (v[0] == '"' || v[0] == '\'') && !closesQuote(v[1:], v[0]):
+				w.openQuote = v[0]
+			case opensPlainScalar(v):
+				w.plainScalarAt = info.indent
+			}
 		}
 		return info
 	}
@@ -254,6 +273,7 @@ func (w *lineWalker) next(line string) lineInfo {
 	w.stack = append(w.stack, pathFrame{indent: indent, key: key})
 	info.frames++
 	info.key = key
+	info.hasKey = true
 	info.keyCol = indent
 	info.value = value
 	info.keyPath = w.pathOf(w.stack)
@@ -265,10 +285,15 @@ func (w *lineWalker) next(line string) lineInfo {
 	if isBlockScalarIndicator(value) {
 		w.blockScalarAt = indent
 	}
-	if v := stripInlineComment(value); v != "" && (v[0] == '[' || v[0] == '{') {
-		w.openFlow(v)
-	} else if v != "" && (v[0] == '"' || v[0] == '\'') && !closesQuote(v[1:], v[0]) {
-		w.openQuote = v[0]
+	if v := stripInlineComment(value); v != "" {
+		switch {
+		case v[0] == '[' || v[0] == '{':
+			w.openFlow(v)
+		case (v[0] == '"' || v[0] == '\'') && !closesQuote(v[1:], v[0]):
+			w.openQuote = v[0]
+		case opensPlainScalar(v):
+			w.plainScalarAt = keyColumn(info)
+		}
 	}
 	return info
 }
@@ -390,10 +415,15 @@ func splitKeyValue(s string) (key, value string, ok bool) {
 				break
 			}
 		}
-		if end < 0 || end+1 >= len(s) || s[end+1] != ':' {
+		// YAML allows whitespace between a quoted key and its colon.
+		colon := end + 1
+		for colon < len(s) && (s[colon] == ' ' || s[colon] == '\t') {
+			colon++
+		}
+		if colon >= len(s) || s[colon] != ':' {
 			return "", "", false
 		}
-		if end+2 < len(s) && s[end+2] != ' ' && s[end+2] != '\t' {
+		if colon+1 < len(s) && s[colon+1] != ' ' && s[colon+1] != '\t' {
 			return "", "", false
 		}
 		key := s[1:end]
@@ -402,7 +432,7 @@ func splitKeyValue(s string) (key, value string, ok bool) {
 		} else if unquoted, err := strconv.Unquote(`"` + key + `"`); err == nil {
 			key = unquoted
 		}
-		return key, strings.TrimSpace(s[end+2:]), true
+		return key, strings.TrimSpace(s[colon+1:]), true
 	}
 	if s[0] == '[' || s[0] == '{' || s[0] == '&' || s[0] == '*' || s[0] == '!' || s[0] == '|' || s[0] == '>' {
 		return "", "", false
@@ -463,4 +493,26 @@ func inlineCommentIndex(line string) int {
 		tokenStart = startsToken(line, i, tokenStart)
 	}
 	return -1
+}
+
+// opensPlainScalar reports whether a value starts a plain (unquoted) scalar,
+// which may continue on the following more-indented lines. A value that is
+// only an anchor or a tag introduces the node written below it, not a
+// scalar, and an alias is complete on its own line.
+func opensPlainScalar(v string) bool {
+	for v != "" && (v[0] == '&' || v[0] == '!') {
+		sp := strings.IndexAny(v, " \t")
+		if sp < 0 {
+			return false
+		}
+		v = strings.TrimLeft(v[sp:], " \t")
+	}
+	if v == "" {
+		return false
+	}
+	switch v[0] {
+	case '"', '\'', '|', '>', '[', '{', '*':
+		return false
+	}
+	return true
 }

@@ -239,7 +239,18 @@ err = doc.Delete("app.debug")           // remove a key (or an element: "app.ser
 clone := doc.Copy()                     // independent deep copy, formatting included
 ```
 
-Paths use dots for keys and `[i]` for array indices: `services.web.ports[0]`. `Set` creates missing intermediate mappings. Keys of new map values are written in sorted order.
+Paths use dots for keys and `[i]` for array indices: `services.web.ports[0]`. `Set` creates missing intermediate mappings.
+
+A `map[string]interface{}` is written with its keys sorted, because Go maps have no order of their own. Pass an `OrderedMap` when the order matters:
+
+```go
+doc.Set("database", yamler.OrderedMap{
+    Keys: []string{"host", "port", "name"},
+    Values: map[string]interface{}{
+        "host": "localhost", "port": 5432, "name": "app",
+    },
+})
+```
 
 ### 3. Array Operations
 
@@ -391,7 +402,7 @@ Formatting information is detected once at load time and cached; parsed paths ar
 go test -bench . -benchmem
 ```
 
-Every mutation re-serializes the document to keep the formatting snapshot current, so batch many changes with `SetAll` or apply them before a single `Save` rather than saving after each one.
+Mutations only change the node tree: the document is rendered when you ask for it (`String`, `ToBytes`, `Save`), so the cost of a batch of edits does not grow with their number, and rendering the same document twice always gives the same bytes.
 
 ## ⚠️ Known Limitations
 
@@ -401,6 +412,7 @@ Every mutation re-serializes the document to keep the formatting snapshot curren
 - A comment on a `---` separator line is moved to the following line.
 - New arrays created by `Set`/`AppendToArray` use two-space block style; existing arrays keep their own style.
 - Tabs inside values, CR-only line breaks and explicit tags (`!!str`) are outside what the round-trip tests cover.
+- Documents whose root is a scalar, keys long enough that yaml.v3 writes them in explicit `? key` form (over 128 characters), and block scalars whose content starts with a whitespace-only line are written by the encoder without formatting restoration.
 
 See [FORMATTING_SUPPORT.md](FORMATTING_SUPPORT.md) for the detailed compatibility matrix and [FEATURES.md](FEATURES.md) for a feature walkthrough.
 
@@ -414,6 +426,7 @@ See [FORMATTING_SUPPORT.md](FORMATTING_SUPPORT.md) for the detailed compatibilit
 
 ### Basic Operations
 - `Get(path)`, `Set(path, value)`, `Has(path)`, `Delete(path)`
+- `OrderedMap` - a map value whose keys keep the order they are listed in
 - `Keys(path)` - keys of a mapping in document order
 - `Copy()` - deep copy with formatting
 
@@ -454,6 +467,10 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 4. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
 5. Push to the branch (`git push origin feature/AmazingFeature`)
 6. Open a Pull Request
+
+## 📜 Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for the release history.
 
 ## 📄 License
 

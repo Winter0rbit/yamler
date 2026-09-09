@@ -11,6 +11,15 @@ import (
 func preserveOriginalFormatting(newContent []byte, original string, info *FormattingInfo, preserveDocumentSeparator bool) []byte {
 	newStr := string(newContent)
 
+	if !info.Structural || hasExplicitKeys(newStr) {
+		// Nothing here can be modelled line by line: a document whose root is
+		// a scalar has no structure to restore, and yaml.v3 renders long or
+		// complex keys in explicit "? key" / ": value" form, where
+		// re-indenting would move keys into the wrong mapping. Keep the
+		// encoder output and only restore document markers.
+		return []byte(restoreDocumentSeparators(newStr, info, original, preserveDocumentSeparator))
+	}
+
 	// Convert spaces to tabs if original used tabs
 	if info.UseTabs {
 		newStr = convertSpacesToTabs(newStr, info)
@@ -68,7 +77,7 @@ func cleanupEmptyLines(content, original string) string {
 	for i, line := range lines {
 		li := w.next(line)
 		if !isBlankLine(line) {
-			structural = !li.skip && (li.key != "" || li.isItem)
+			structural = !li.skip && (li.hasKey || li.isItem)
 			continue
 		}
 		if li.skip && w.blockScalarAt >= 0 {
@@ -169,13 +178,13 @@ func convertToCustomIndentation(content string, targetIndentSize int) string {
 			switch {
 			case parent == nil:
 				newIndent = fr.indent
-			case fr.key == "":
+			case fr.isItem:
 				// A list item under a key: encoder puts it at key+2.
 				newIndent = parent.new + (fr.indent - parent.old)
-				if w.stack[k-1].key != "" {
+				if !w.stack[k-1].isItem {
 					newIndent = parent.new + targetIndentSize*(fr.indent-parent.old)/2
 				}
-			case w.stack[k-1].key == "":
+			case w.stack[k-1].isItem:
 				// Key inside a list item keeps its dash offset.
 				newIndent = parent.new + (fr.indent - parent.old)
 			default:
@@ -224,7 +233,7 @@ func applyEmptyLinePatterns(content string, info *FormattingInfo) string {
 		switch {
 		case li.skip && strings.HasPrefix(trimmed, "#"):
 			key = trimmed
-		case !li.skip && (li.key != "" || li.isItem):
+		case !li.skip && (li.hasKey || li.isItem):
 			key = li.idxPath
 		}
 		if n := info.EmptyLines[key]; n > 0 && i > 0 && strings.TrimSpace(lines[i-1]) != "" {
@@ -303,7 +312,7 @@ func applyExactIndentations(content string, info *FormattingInfo) string {
 		switch {
 		case li.isItem:
 			recorded, ok = info.KeyIndents[li.path+"[]"]
-		case li.key != "":
+		case li.hasKey:
 			recorded, ok = info.KeyIndents[li.keyPath]
 		}
 
@@ -313,12 +322,12 @@ func applyExactIndentations(content string, info *FormattingInfo) string {
 		}
 		// Siblings share a column: follow the first child placed under the
 		// same parent.
-		if first > 0 && first-1 < len(frames) && frames[first-1].childCol >= 0 && (li.key != "" || li.isItem) {
+		if first > 0 && first-1 < len(frames) && frames[first-1].childCol >= 0 && (li.hasKey || li.isItem) {
 			want = frames[first-1].childCol
 		}
 		// Never leave the parent: a key sits right of its parent key, an
 		// item at or right of it.
-		if parentCol >= 0 && (li.key != "" || li.isItem) {
+		if parentCol >= 0 && (li.hasKey || li.isItem) {
 			minCol := parentCol + 1
 			if li.isItem {
 				minCol = parentCol
@@ -332,7 +341,7 @@ func applyExactIndentations(content string, info *FormattingInfo) string {
 		}
 		target[i] = want
 		lastDelta = want - li.indent
-		if first > 0 && first-1 < len(frames) && frames[first-1].childCol < 0 && (li.key != "" || li.isItem) {
+		if first > 0 && first-1 < len(frames) && frames[first-1].childCol < 0 && (li.hasKey || li.isItem) {
 			frames[first-1].childCol = want
 		}
 
@@ -344,7 +353,7 @@ func applyExactIndentations(content string, info *FormattingInfo) string {
 		for len(frames) < len(w.stack) {
 			frames = append(frames, frameInfo{col: want, delta: delta, shift: shift, childCol: -1})
 		}
-		if li.isItem && li.key != "" {
+		if li.isItem && li.hasKey {
 			// "- key:" lines: the inline key has its own column and record.
 			keyCol := want + (li.keyCol - li.indent)
 			keyDelta := delta
@@ -445,7 +454,7 @@ func applyZeroIndentArrays(content string, info *FormattingInfo) string {
 	w := newLineWalker()
 	for i := 0; i < len(lines); i++ {
 		li := w.next(lines[i])
-		if li.skip || li.key == "" || !info.ZeroIndentArrays[li.keyPath] {
+		if li.skip || !li.hasKey || !info.ZeroIndentArrays[li.keyPath] {
 			continue
 		}
 		// Find the first item of the sequence that follows this key.
@@ -515,4 +524,16 @@ func lastLineIs(content, marker string) bool {
 		content = content[i+1:]
 	}
 	return strings.TrimSpace(content) == marker
+}
+
+// hasExplicitKeys reports whether content uses the explicit key form
+// ("? key" on its own line), which the formatting passes do not support.
+func hasExplicitKeys(content string) bool {
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "?" || strings.HasPrefix(trimmed, "? ") {
+			return true
+		}
+	}
+	return false
 }
