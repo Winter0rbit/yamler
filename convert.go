@@ -110,6 +110,8 @@ func interfaceToNode(v interface{}) (*yaml.Node, error) {
 		return createFloat64SliceNode(val)
 	case []bool:
 		return createBoolSliceNode(val)
+	case OrderedMap:
+		return val.Node()
 	case map[string]interface{}:
 		return createMapNode(val)
 	case []map[string]interface{}:

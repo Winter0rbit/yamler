@@ -239,7 +239,18 @@ err = doc.Delete("app.debug")           // remove a key (or an element: "app.ser
 clone := doc.Copy()                     // independent deep copy, formatting included
 ```
 
-Paths use dots for keys and `[i]` for array indices: `services.web.ports[0]`. `Set` creates missing intermediate mappings. Keys of new map values are written in sorted order.
+Paths use dots for keys and `[i]` for array indices: `services.web.ports[0]`. `Set` creates missing intermediate mappings.
+
+A `map[string]interface{}` is written with its keys sorted, because Go maps have no order of their own. Pass an `OrderedMap` when the order matters:
+
+```go
+doc.Set("database", yamler.OrderedMap{
+    Keys: []string{"host", "port", "name"},
+    Values: map[string]interface{}{
+        "host": "localhost", "port": 5432, "name": "app",
+    },
+})
+```
 
 ### 3. Array Operations
 
@@ -415,6 +426,7 @@ See [FORMATTING_SUPPORT.md](FORMATTING_SUPPORT.md) for the detailed compatibilit
 
 ### Basic Operations
 - `Get(path)`, `Set(path, value)`, `Has(path)`, `Delete(path)`
+- `OrderedMap` - a map value whose keys keep the order they are listed in
 - `Keys(path)` - keys of a mapping in document order
 - `Copy()` - deep copy with formatting
 
@@ -455,6 +467,10 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 4. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
 5. Push to the branch (`git push origin feature/AmazingFeature`)
 6. Open a Pull Request
+
+## 📜 Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for the release history.
 
 ## 📄 License
 

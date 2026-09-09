@@ -20,6 +20,7 @@
 - ✅ CI: tests with `-race`, `gofmt`, `go vet`, `goimports`
 - ✅ `Has` / `Keys` / `Copy` / `Delete` / `DeleteAll`; sentinel errors for `errors.Is`
 - ✅ Lazy serialization: mutations only touch the node tree, rendering happens on `String`/`ToBytes`/`Save`
+- ✅ `OrderedMap` for values whose key order matters
 
 ## 🎯 Priorities
 
@@ -41,7 +42,6 @@
 - [ ] Preserve `%YAML` / `%TAG` directives
 - [ ] Keep comments on `---` separator lines in place
 - [ ] Preserve CRLF line endings
-- [ ] Preserve key order of `map[string]interface{}` values (ordered input type)
 
 ### Phase 5: Tooling
 - [ ] Configuration diff between two documents

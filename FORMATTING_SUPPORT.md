@@ -60,7 +60,7 @@ ports: [80,   # http
 Such values are re-formatted by the encoder (comments are kept).
 
 ### Newly created structures
-Arrays and mappings created by `Set`/`AppendToArray` use two-space block style. Map values given as `map[string]interface{}` are written with their keys sorted.
+Arrays and mappings created by `Set`/`AppendToArray` use two-space block style. Map values given as `map[string]interface{}` are written with their keys sorted; use `OrderedMap` to choose the order.
 
 ### Separator comments
 `--- # comment` is preserved, but the comment moves to the line after the separator.
