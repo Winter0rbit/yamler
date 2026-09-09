@@ -4,12 +4,58 @@ All notable changes to this project are documented in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-09-09
+
+Restores `OrderedMap`, which v1.3.0 dropped by accident, and completes the
+round of data-preservation fixes. Upgrading from v1.3.0 is recommended.
+
+### Fixed
+
+- **`OrderedMap` is back.** It is part of the public API of v1.2.4 and was
+  removed from v1.3.0 unintentionally; code using it did not compile against
+  that release. It now also keeps key order, which it never did: its
+  `MarshalYAML` used to return a plain map, losing the order the type exists
+  to preserve.
+- **Flow collections were split on every comma**, so `['a, b']` could become
+  `['a', 'b']`, and `{'a: b': 1}` could be split on the colon inside its key.
+  Splitting is now aware of quoting.
+- **Blank lines inside a multi-line flow collection were dropped**, although
+  they are part of a plain scalar's value.
+- **`key: # comment`** was read as having the value `#`, which made the block
+  below the key look like the continuation of a scalar.
+- **A quoted key followed by a space before its colon** (`'k' : v`) was not
+  recognised as a key, so its line kept the encoder's indentation.
+- **Continuation lines of a multi-line plain scalar** were taken for
+  structure; a line such as `- "` below `a: 0` is content, not a list item.
+- **An empty quoted key** (`"": v`) was indistinguishable from a line without
+  a key.
+- Documents whose root is a scalar, keys longer than 128 characters (which
+  `yaml.v3` writes in explicit `? key` form) and block scalars whose content
+  starts with a whitespace-only line are now written by the encoder without
+  formatting restoration, instead of being re-indented into a different
+  document. Their data is preserved; their layout may change.
+
+### Added
+
+- `Set` accepts an `OrderedMap` and writes its keys in the given order. A
+  plain `map[string]interface{}` is still written sorted, since Go maps have
+  no order of their own.
+
+### Changed
+
+- **Serialization is lazy.** Mutations only change the node tree; the document
+  is rendered by `String`, `ToBytes`, `Save` and `DocumentsToBytes`. Editing
+  100 keys of a 100-service document and saving once went from 301 ms and
+  295 MB of allocations to 5.4 ms and 3.7 MB, and rendering is now idempotent:
+  the result no longer depends on how often the document was rendered along
+  the way.
+- A document built from scratch (`Load("")`) ends with a newline like any
+  other, instead of only growing one on the second render.
+
 ## [1.3.0] - 2026-09-09
 
 The first release since v1.2.4. It fixes several ways in which the library
-changed or lost data in exactly the file formats it advertises support for,
-adds multi-document and structural APIs, and makes editing large documents
-orders of magnitude cheaper.
+changed or lost data in exactly the file formats it advertises support for.
 
 ### Fixed
 
@@ -19,8 +65,7 @@ orders of magnitude cheaper.
 - **Multi-document streams lost data.** `Load` silently kept only the first
   document of a `---`-separated stream and dropped the rest on save — a
   Kubernetes manifest with a Service and a Deployment came back with only the
-  Service. `Load` now returns an error for such input and `LoadAll` handles it
-  properly.
+  Service.
 - **Zero-indent lists were re-indented.** The kubectl / GitHub Actions /
   Ansible style
   ```yaml
@@ -32,17 +77,6 @@ orders of magnitude cheaper.
   `Set`, and the array-document methods removed it as well.
 - **A trailing `...` was invented** whenever the last line happened to end with
   three dots (for example `run: go test ./...`).
-- **Flow collections were split on every comma**, so `['a, b']` could become
-  `['a', 'b']` and `{'a: b': 1}` could be split on the colon inside the key.
-- **Blank lines inside a multi-line flow collection were dropped**, although
-  they are part of a plain scalar's value.
-- **`key: # comment`** was read as having the value `#`, which made the block
-  below the key look like a scalar continuation.
-- **A quoted key followed by a space before its colon** (`'k' : v`) was not
-  recognised as a key.
-- **Continuation lines of multi-line plain scalars** were taken for structure.
-- **An empty quoted key** (`"": v`) was indistinguishable from a line without
-  a key.
 - **Formatting hints no longer leak between same-named keys.** Blank lines,
   flow styles, comment spacing and indentation are recorded per path, so a
   `branches: [main, develop]` in one job no longer reformats a
@@ -67,34 +101,26 @@ orders of magnitude cheaper.
   `ErrPath`, `ErrRoot`, `ErrParse`, `ErrIO`, `ErrMultiDocument`,
   `ErrValidation`, `ErrUnsupported`. Errors from `os` and `yaml.v3` remain
   reachable through `errors.Is` / `errors.As`.
-- `OrderedMap` values passed to `Set` now keep their key order (a plain
-  `map[string]interface{}` is still written with sorted keys, since Go maps
-  have no order).
 - A round-trip test corpus of real-world files (docker-compose, multi-document
   Kubernetes, GitHub Actions, Ansible, Helm values) that must survive
   `Load` → `ToBytes` byte for byte, and a `FuzzRoundTrip` fuzz test.
 
 ### Changed
 
-- **Serialization is lazy.** Mutations only change the node tree; the document
-  is rendered by `String`, `ToBytes`, `Save` and `DocumentsToBytes`. Editing
-  100 keys of a 100-service document and saving once went from 301 ms and
-  295 MB of allocations to 5.4 ms and 3.7 MB, and rendering is now idempotent.
 - `Load` returns `ErrMultiDocument` for a `---`-separated stream instead of
-  silently discarding all but the first document. This is the one behaviour
-  change that can break existing code; use `LoadAll` for such input.
-- `OrderedMap.MarshalYAML` now actually preserves key order. It previously
-  returned a plain map, which lost the order the type exists to keep.
-- Documents whose root is a scalar, keys longer than 128 characters (which
-  `yaml.v3` writes in explicit `? key` form) and block scalars whose content
-  starts with a whitespace-only line are written by the encoder without
-  formatting restoration; their data is preserved, their layout may change.
+  silently discarding all but the first document. This is the one intended
+  behaviour change that can break existing code; use `LoadAll` for such input.
 - `document.go` was split into files by concern, and ~830 lines of unreachable
   code were removed. `coverage.out`, `test_results.log` and a duplicated
   `example/` directory are no longer part of the repository.
 - Documentation now matches the implementation: the previous README documented
   methods that did not exist (`GetIntArrayElement`, `LoadSchema`) and claimed
   100% test coverage.
+
+### Removed
+
+- `OrderedMap` — unintentionally, as part of a dead-code cleanup. It is
+  restored in v1.3.1; prefer that release.
 
 ## [1.2.4] - 2026-02-03
 
@@ -120,6 +146,7 @@ orders of magnitude cheaper.
 
 - Move the package to the repository root for a clean import path.
 
+[1.3.1]: https://github.com/Winter0rbit/yamler/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/Winter0rbit/yamler/compare/v1.2.4...v1.3.0
 [1.2.4]: https://github.com/Winter0rbit/yamler/compare/v1.2.3...v1.2.4
 [1.2.3]: https://github.com/Winter0rbit/yamler/compare/v1.2.2...v1.2.3
