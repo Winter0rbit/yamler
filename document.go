@@ -212,7 +212,9 @@ func (d *Document) ToBytes() ([]byte, error) {
 	if err := encoder.Encode(d.root); err != nil {
 		return nil, err
 	}
-	encoder.Close()
+	if err := encoder.Close(); err != nil {
+		return nil, err
+	}
 
 	// Make a copy of the buffer contents
 	result := make([]byte, buf.Len())

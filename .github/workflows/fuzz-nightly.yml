@@ -1,0 +1,31 @@
+name: Fuzz (nightly)
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: 'stable'
+        cache: true
+
+    - name: Fuzz round trip
+      run: go test -run '^$' -fuzz FuzzRoundTrip -fuzztime 30m .
+
+    # A crasher found here is worth keeping: download the artifact and
+    # commit it under testdata/fuzz/FuzzRoundTrip/ as a regression seed.
+    - name: Upload failing inputs
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: fuzz-failures
+        path: testdata/fuzz/

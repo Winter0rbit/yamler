@@ -377,34 +377,6 @@ func applyExactIndentations(content string, info *FormattingInfo) string {
 	return strings.Join(lines, "\n")
 }
 
-// shiftBlock changes the indentation of lines[start] and of every following
-// line that is nested under it (indented deeper than blockIndent) by delta
-// columns. Blank lines are left untouched.
-func shiftBlock(lines []string, start, blockIndent, delta int) {
-	startTrimmed := strings.TrimSpace(lines[start])
-	startIsKey := !(startTrimmed == "-" || strings.HasPrefix(startTrimmed, "- "))
-	for j := start; j < len(lines); j++ {
-		trimmed := strings.TrimSpace(lines[j])
-		if trimmed == "" {
-			continue
-		}
-		indent := getLineIndentation(lines[j])
-		if j > start && indent <= blockIndent {
-			// Zero-indent list items sit at the column of their key but
-			// still belong to its block.
-			isItem := trimmed == "-" || strings.HasPrefix(trimmed, "- ")
-			if !(startIsKey && isItem && indent == blockIndent) {
-				break
-			}
-		}
-		newIndent := indent + delta
-		if newIndent < 0 {
-			newIndent = 0
-		}
-		lines[j] = strings.Repeat(" ", newIndent) + strings.TrimLeft(lines[j], " ")
-	}
-}
-
 // restoreDocumentSeparators adds back document separators if they were in the original
 func restoreDocumentSeparators(content string, info *FormattingInfo, originalContent string, preserveDocumentSeparator bool) string {
 	// Check if the original content actually starts with ---

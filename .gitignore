@@ -8,6 +8,12 @@ test_results.log
 # Build output
 /bin/
 /dist/
+# Binaries built from the example modules
+examples/*/[a-z]*
+!examples/*/*.go
+!examples/*/go.mod
+!examples/*/go.sum
+!examples/*/*.md
 
 # IDE
 .idea/

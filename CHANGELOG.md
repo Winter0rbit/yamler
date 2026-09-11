@@ -4,10 +4,11 @@ All notable changes to this project are documented in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.3.1] - 2026-09-09
+## [1.3.2] - 2026-09-10
 
 Restores `OrderedMap`, which v1.3.0 dropped by accident, and completes the
-round of data-preservation fixes. Upgrading from v1.3.0 is recommended.
+round of data-preservation fixes. This is the release to use: v1.3.0 and
+v1.3.1 both point at a commit that predates all of it.
 
 ### Fixed
 
@@ -43,6 +44,11 @@ round of data-preservation fixes. Upgrading from v1.3.0 is recommended.
 
 ### Changed
 
+- CI now runs the linter that the repository has been configured for but
+  never ran, a short fuzzing round on every pull request and a longer one
+  nightly, and tests on both the oldest supported Go version and the current
+  one. A tag push is checked against the changelog and against `main`, so a
+  release cannot again point at a commit that predates it.
 - **Serialization is lazy.** Mutations only change the node tree; the document
   is rendered by `String`, `ToBytes`, `Save` and `DocumentsToBytes`. Editing
   100 keys of a 100-service document and saving once went from 301 ms and
@@ -51,6 +57,13 @@ round of data-preservation fixes. Upgrading from v1.3.0 is recommended.
   the way.
 - A document built from scratch (`Load("")`) ends with a newline like any
   other, instead of only growing one on the second render.
+
+## [1.3.1] - 2026-09-09
+
+Published by mistake: the tag was placed on the same commit as v1.3.0 before
+the release branch had been merged, so this version is byte for byte
+identical to v1.3.0 and contains none of the changes listed above. Use
+v1.3.2.
 
 ## [1.3.0] - 2026-09-09
 
@@ -120,7 +133,7 @@ changed or lost data in exactly the file formats it advertises support for.
 ### Removed
 
 - `OrderedMap` — unintentionally, as part of a dead-code cleanup. It is
-  restored in v1.3.1; prefer that release.
+  restored in v1.3.2; prefer that release.
 
 ## [1.2.4] - 2026-02-03
 
@@ -146,6 +159,7 @@ changed or lost data in exactly the file formats it advertises support for.
 
 - Move the package to the repository root for a clean import path.
 
+[1.3.2]: https://github.com/Winter0rbit/yamler/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/Winter0rbit/yamler/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/Winter0rbit/yamler/compare/v1.2.4...v1.3.0
 [1.2.4]: https://github.com/Winter0rbit/yamler/compare/v1.2.3...v1.2.4

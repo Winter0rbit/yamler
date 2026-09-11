@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags: [ 'v*' ]
+
+# A tag is the only thing users of a Go module ever see, and it cannot be
+# moved once the module proxy has cached it. This job checks, at the moment
+# the tag is pushed, that it points at something worth releasing.
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: 'stable'
+        cache: true
+
+    - name: The tagged commit must be on main
+      run: |
+        if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+          echo "::error::the tagged commit is not reachable from main;" \
+               "the release branch was probably not merged yet"
+          exit 1
+        fi
+
+    - name: The changelog must describe this version
+      run: |
+        version="${GITHUB_REF_NAME#v}"
+        if [ ! -f CHANGELOG.md ]; then
+          echo "::error::CHANGELOG.md is missing from the tagged tree"
+          exit 1
+        fi
+        if ! grep -q "^## \[$version\]" CHANGELOG.md; then
+          echo "::error::CHANGELOG.md has no '## [$version]' section;" \
+               "the tag points at a commit that predates this release"
+          exit 1
+        fi
+
+    - name: Tests
+      run: go test -race ./...
+
+    - name: Release notes
+      run: |
+        version="${GITHUB_REF_NAME#v}"
+        {
+          echo "## Release notes for $GITHUB_REF_NAME"
+          echo
+          awk "/^## \[$version\]/{f=1;next} /^## \[/{f=0} f" CHANGELOG.md
+        } >> "$GITHUB_STEP_SUMMARY"

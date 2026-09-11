@@ -6,52 +6,6 @@ import (
 	"strings"
 )
 
-// preserveMultilineFlow preserves multiline flow object formatting
-// isInlineObject checks if a multiline flow object is actually an inline object
-func isInlineObject(lines []string, startIndex int) bool {
-	if startIndex >= len(lines) {
-		return false
-	}
-
-	line := lines[startIndex]
-	trimmed := strings.TrimSpace(line)
-
-	// Count opening and closing brackets/braces in the entire object
-	openBraces := strings.Count(trimmed, "{")
-	closeBraces := strings.Count(trimmed, "}")
-	openBrackets := strings.Count(trimmed, "[")
-	closeBrackets := strings.Count(trimmed, "]")
-
-	// Check a few lines ahead to see if this is a compact inline object
-	maxLinesAhead := 10
-	for i := startIndex + 1; i < len(lines) && i < startIndex+maxLinesAhead; i++ {
-		nextLine := strings.TrimSpace(lines[i])
-		if nextLine == "" {
-			continue
-		}
-
-		openBraces += strings.Count(nextLine, "{")
-		closeBraces += strings.Count(nextLine, "}")
-		openBrackets += strings.Count(nextLine, "[")
-		closeBrackets += strings.Count(nextLine, "]")
-
-		// If we've balanced all brackets/braces within a few lines, it's likely inline
-		if openBraces == closeBraces && openBrackets == closeBrackets {
-			// Additional check: if the total line count is small (< 6 lines), it's inline
-			return (i - startIndex) < 6
-		}
-
-		// If we encounter a line that starts a new key at the same level (not indented more than the original), stop
-		nextIndent := len(nextLine) - len(strings.TrimLeft(nextLine, " \t"))
-		originalIndent := len(line) - len(strings.TrimLeft(line, " \t"))
-		if strings.Contains(nextLine, ":") && nextIndent <= originalIndent {
-			break
-		}
-	}
-
-	return false
-}
-
 // equalStringSlices compares two string slices for equality
 func equalStringSlices(a, b []string) bool {
 	if len(a) != len(b) {
@@ -63,36 +17,6 @@ func equalStringSlices(a, b []string) bool {
 		}
 	}
 	return true
-}
-
-// isInsideInlineObject checks if a line is inside an inline object
-func isInsideInlineObject(lines []string, lineIndex int) bool {
-	if lineIndex >= len(lines) {
-		return false
-	}
-
-	currentLine := lines[lineIndex]
-	currentIndent := len(currentLine) - len(strings.TrimLeft(currentLine, " \t"))
-
-	// Look backwards to find a potential inline object start
-	for i := lineIndex - 1; i >= 0; i-- {
-		line := lines[i]
-		trimmed := strings.TrimSpace(line)
-		lineIndent := len(line) - len(strings.TrimLeft(line, " \t"))
-
-		// If we find a line with less indentation that contains a key, check if it's an inline object
-		if lineIndent < currentIndent && strings.Contains(trimmed, ":") {
-			// Check if this line starts an inline object
-			if strings.Contains(trimmed, "{") && !strings.Contains(trimmed, "}") {
-				// This could be the start of an inline object, check if it closes
-				return isInlineObject(lines, i)
-			}
-			// If we find a regular key at a lower indent level, we're not inside an inline object
-			return false
-		}
-	}
-
-	return false
 }
 
 // keyValueStart returns the index in line just after the ":" of its key.
